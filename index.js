@@ -834,7 +834,7 @@ function Runtime() {
         }
 
         function parseMethodName(rawName) {
-            const match = /([+-])\s(\S+)/.exec(rawName);
+            const match = /([+\-])\s(\S+)/.exec(rawName);
             let name, kind;
             if (match === null) {
                 kind = isClass() ? '+' : '-';
@@ -1353,7 +1353,7 @@ function Runtime() {
             });
 
             Object.keys(methods).forEach(function (rawMethodName) {
-                const match = /([+-])\s(\S+)/.exec(rawMethodName);
+                const match = /([+\-])\s(\S+)/.exec(rawMethodName);
                 if (match === null)
                     throw new Error("Invalid method name");
                 const kind = match[1];
@@ -1429,7 +1429,7 @@ function Runtime() {
         const methodSpecs = Object.keys(methods).map(function (rawMethodName) {
             const method = methods[rawMethodName];
 
-            const match = /([+-])\s(\S+)/.exec(rawMethodName);
+            const match = /([+\-])\s(\S+)/.exec(rawMethodName);
             if (match === null)
                 throw new Error("Invalid method name");
             const kind = match[1];
