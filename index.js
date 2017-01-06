@@ -1362,14 +1362,17 @@ function Runtime() {
                 let method;
                 const value = methods[rawMethodName];
                 if (typeof value === 'function') {
-                    let types;
+                    let types = null;
                     if (rawMethodName in superClass) {
                         types = superClass[rawMethodName].types;
                     } else {
-                        const protocol = protocols.find(function (protocol) {
-                            return rawMethodName in protocol.methods;
-                        });
-                        types = (protocol !== undefined) ? protocol.methods[rawMethodName].types : null;
+                        for (let protocol of protocols) {
+                            const method = protocol.methods[rawMethodName];
+                            if (method !== undefined) {
+                                types = method.types;
+                                break;
+                            }
+                        }
                     }
                     if (types === null)
                         throw new Error("Unable to find '" + rawMethodName + "' in super-class or any of its protocols");
