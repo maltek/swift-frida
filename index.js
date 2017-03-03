@@ -2121,13 +2121,13 @@ function Runtime() {
 
         const type = typeof v;
         if (type === 'string') {
-            if (cachedNSString === null) {
+            if (cachedNSStringCtor === null) {
                 cachedNSString = classRegistry.NSString;
                 cachedNSStringCtor = cachedNSString.stringWithUTF8String_;
             }
             return cachedNSStringCtor.call(cachedNSString, Memory.allocUtf8String(v));
         } else if (type === 'number') {
-            if (cachedNSNumber === null) {
+            if (cachedNSNumberCtor === null) {
                 cachedNSNumber = classRegistry.NSNumber;
                 cachedNSNumberCtor = cachedNSNumber.numberWithDouble_;
             }
