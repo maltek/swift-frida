@@ -209,6 +209,9 @@ function Runtime() {
                         const handle = Memory.readPointer(classHandles.add(i * pointerSize));
                         const name = Memory.readUtf8String(api.class_getName(handle));
                         cachedClasses[name] = handle;
+
+                        // Duktape does not support getOwnPropertyDescriptor yet and checks the target instead:
+                        target[name] = true;
                     }
                 }
                 return Object.keys(cachedClasses);
@@ -219,13 +222,6 @@ function Runtime() {
                     configurable: true,
                     enumerable: true
                 };
-            },
-            // Duktape needs these two legacy traps:
-            enumerate(target) {
-                return this.ownKeys();
-            },
-            keys(target) {
-                return this.ownKeys();
             },
         });
 
@@ -301,6 +297,7 @@ function Runtime() {
             ownKeys(target) {
                 const protocolNames = [];
                 cachedProtocols = {};
+
                 const numProtocolsBuf = Memory.alloc(pointerSize);
                 const protocolHandles = api.objc_copyProtocolList(numProtocolsBuf);
                 try {
@@ -308,12 +305,17 @@ function Runtime() {
                     for (let i = 0; i !== numProtocols; i++) {
                         const handle = Memory.readPointer(protocolHandles.add(i * pointerSize));
                         const name = Memory.readUtf8String(api.protocol_getName(handle));
+
                         protocolNames.push(name);
                         cachedProtocols[name] = handle;
+
+                        // Duktape does not support getOwnPropertyDescriptor yet and checks the target instead:
+                        target[name] = true;
                     }
                 } finally {
                     api.free(protocolHandles);
                 }
+
                 return protocolNames;
             },
             getOwnPropertyDescriptor(target, property) {
@@ -322,13 +324,6 @@ function Runtime() {
                     configurable: true,
                     enumerable: true
                 };
-            },
-            // Duktape needs these two legacy traps:
-            enumerate(target) {
-                return this.ownKeys();
-            },
-            keys(target) {
-                return this.ownKeys();
             },
         });
 
@@ -589,7 +584,10 @@ function Runtime() {
                                         serial++;
                                         name = jsName + serial;
                                     }
-                                    jsNames[name] = name;
+                                    jsNames[name] = true;
+
+                                    // Duktape does not support getOwnPropertyDescriptor yet and checks the target instead:
+                                    target[name] = true;
 
                                     const fullName = fullNamePrefix + nativeName;
                                     if (cachedMethods[fullName] === undefined) {
@@ -616,8 +614,12 @@ function Runtime() {
                         Object.keys(protocolMethods).forEach(function (methodName) {
                             if (methodName[0] !== '+' && methodName[0] !== '-') {
                                 const details = protocolMethods[methodName];
-                                if (details.implemented)
+                                if (details.implemented) {
                                     methodNames.push(methodName);
+
+                                    // Duktape does not support getOwnPropertyDescriptor yet and checks the target instead:
+                                    target[methodName] = true;
+                                }
                             }
                         });
 
@@ -633,13 +635,6 @@ function Runtime() {
                     configurable: true,
                     enumerable: true
                 };
-            },
-            // Duktape needs these two legacy traps:
-            enumerate(target) {
-                return this.ownKeys();
-            },
-            keys(target) {
-                return this.ownKeys();
             },
         });
 
@@ -1008,6 +1003,7 @@ function Runtime() {
 
     function ObjCIvars(instance, classHandle) {
         const ivars = {};
+        let cachedIvarNames = null;
 
         let classHandles = [];
 
@@ -1065,7 +1061,15 @@ function Runtime() {
                 return true;
             },
             ownKeys(target) {
-                return Object.keys(ivars);
+                if (cachedIvarNames === null) {
+                    cachedIvarNames = Object.keys(ivars);
+                    cachedIvarNames.forEach(name => {
+                        // Duktape does not support getOwnPropertyDescriptor yet and checks the target instead:
+                        target[name] = true;
+                    });
+                }
+
+                return cachedIvarNames;
             },
             getOwnPropertyDescriptor(target, property) {
                 return {
@@ -1073,13 +1077,6 @@ function Runtime() {
                     configurable: true,
                     enumerable: true
                 };
-            },
-            // Duktape needs these two legacy traps:
-            enumerate(target) {
-                return this.ownKeys();
-            },
-            keys(target) {
-                return this.ownKeys();
             },
         });
 
