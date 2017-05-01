@@ -1,6 +1,6 @@
 {
   "name": "frida-objc",
-  "version": "1.0.4",
+  "version": "2.0.0",
   "description": "Objective-C runtime interop from Frida",
   "main": "index.js",
   "browserify": {
