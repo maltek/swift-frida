@@ -432,8 +432,15 @@ function Runtime() {
                         return toJSON;
                     case "toString":
                     case "valueOf":
-                        const description = receiver.description();
-                        return description.UTF8String.bind(description);
+                        const descriptionImpl = receiver.description;
+                        if (descriptionImpl !== undefined) {
+                            const description = descriptionImpl.call(receiver);
+                            if (description !== null)
+                                return description.UTF8String.bind(description);
+                        }
+                        return function () {
+                            return receiver.$className;
+                        };
                     case "equals":
                         return equals;
                     case "$kind":
