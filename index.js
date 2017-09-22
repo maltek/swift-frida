@@ -21,10 +21,12 @@ function Runtime() {
     let singularTypeById = null;
     const PRIV = Symbol('priv');
 
+    const available = api !== null;
+
     Object.defineProperty(this, 'available', {
         enumerable: true,
         get: function () {
-            return api !== null;
+            return available;
         }
     });
 
@@ -35,12 +37,12 @@ function Runtime() {
 
     Object.defineProperty(this, 'classes', {
         enumerable: true,
-        value: classRegistry
+        value: available ? classRegistry : {}
     });
 
     Object.defineProperty(this, 'protocols', {
         enumerable: true,
-        value: protocolRegistry
+        value: available ? protocolRegistry : {}
     });
 
     Object.defineProperty(this, 'Object', {
