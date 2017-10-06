@@ -1538,20 +1538,41 @@ function Runtime() {
         }
         if (!(cls instanceof ObjCObject && (cls.$kind === 'class' || cls.$kind === 'meta-class')))
             throw new Error("Expected an ObjC.Object for a class or meta-class");
-        const ptr = cls.handle;
+        const clsPtr = cls.handle;
 
-        const classHandles = subclasses ? getRecursiveSubclasses(ptr) : [ptr];
+        const classHandles = subclasses ? getRecursiveSubclasses(clsPtr) : [clsPtr];
 
         const classes = new Set(classHandles.map(h => h.toString()));
 
-        Process.enumerateMallocRanges({
-            onMatch: function (range) {
-                const ptr = range.base;
-                const cls = Memory.readPointer(ptr);
-                if (classes.has(cls.toString()) && range.size >= api.class_getInstanceSize(cls)) {
-                    return callbacks.onMatch(new ObjCObject(ptr));
+        let onMatch;
+        const readPointer = Memory.readPointer;
+        const getInstanceSize = api.class_getInstanceSize;
+        const isaMasks = {
+            x64: '0x7ffffffffff8',
+            arm64: '0xffffffff8'
+        };
+        const rawMask = isaMasks[Process.arch];
+        if (rawMask !== undefined) {
+            const mask = ptr(rawMask);
+            onMatch = function (range) {
+                const base = range.base;
+                const cls = readPointer(base).and(mask);
+                if (classes.has(cls.toString()) && range.size >= getInstanceSize(cls)) {
+                    return callbacks.onMatch(new ObjCObject(base));
                 }
-            },
+            };
+        } else {
+            onMatch = function (range) {
+                const base = range.base;
+                const cls = readPointer(base);
+                if (classes.has(cls.toString()) && range.size >= getInstanceSize(cls)) {
+                    return callbacks.onMatch(new ObjCObject(base));
+                }
+            };
+        }
+
+        Process.enumerateMallocRanges({
+            onMatch: onMatch,
             onComplete: callbacks.onComplete
         });
     }
