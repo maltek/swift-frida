@@ -12,6 +12,7 @@ function Runtime() {
     const protocolRegistry = new ProtocolRegistry();
     const scheduledCallbacks = [];
     const bindings = {};
+    let readObjectIsa = null;
     const msgSendBySignatureId = {};
     const msgSendSuperBySignatureId = {};
     let cachedNSString = null;
@@ -1114,12 +1115,23 @@ function Runtime() {
                 const fromNative = type.fromNative || identityTransform;
                 const toNative = type.toNative || identityTransform;
 
+                let read, write;
+                if (name === 'isa') {
+                    read = readObjectIsa;
+                    write = function () {
+                        throw new Error('Unable to set the isa instance variable');
+                    };
+                } else {
+                    read = type.read;
+                    write = type.write;
+                }
+
                 impl = {
                     get() {
-                        return fromNative.call(instance, type.read(address));
+                        return fromNative.call(instance, read(address));
                     },
                     set(value) {
-                        type.write(address, toNative.call(instance, value));
+                        write(address, toNative.call(instance, value));
                     }
                 };
                 entry[1] = impl;
@@ -1541,38 +1553,17 @@ function Runtime() {
         const clsPtr = cls.handle;
 
         const classHandles = subclasses ? getRecursiveSubclasses(clsPtr) : [clsPtr];
-
         const classes = new Set(classHandles.map(h => h.toString()));
-
-        let onMatch;
-        const readPointer = Memory.readPointer;
         const getInstanceSize = api.class_getInstanceSize;
-        const isaMasks = {
-            x64: '0x7ffffffffff8',
-            arm64: '0xffffffff8'
-        };
-        const rawMask = isaMasks[Process.arch];
-        if (rawMask !== undefined) {
-            const mask = ptr(rawMask);
-            onMatch = function (range) {
-                const base = range.base;
-                const cls = readPointer(base).and(mask);
-                if (classes.has(cls.toString()) && range.size >= getInstanceSize(cls)) {
-                    return callbacks.onMatch(new ObjCObject(base));
-                }
-            };
-        } else {
-            onMatch = function (range) {
-                const base = range.base;
-                const cls = readPointer(base);
-                if (classes.has(cls.toString()) && range.size >= getInstanceSize(cls)) {
-                    return callbacks.onMatch(new ObjCObject(base));
-                }
-            };
-        }
 
         Process.enumerateMallocRanges({
-            onMatch: onMatch,
+            onMatch: function (range) {
+                const base = range.base;
+                const cls = readObjectIsa(base);
+                if (classes.has(cls.toString()) && range.size >= getInstanceSize(cls)) {
+                    return callbacks.onMatch(new ObjCObject(base));
+                }
+            },
             onComplete: callbacks.onComplete
         });
     }
@@ -1861,6 +1852,27 @@ function Runtime() {
         if (objCObjectBuiltins.has(result))
             result += "2";
         return result;
+    }
+
+    if (available) {
+        const {readPointer} = Memory;
+
+        const isaMasks = {
+            x64: '0x7ffffffffff8',
+            arm64: '0xffffffff8'
+        };
+
+        const rawMask = isaMasks[Process.arch];
+        if (rawMask !== undefined) {
+            const mask = ptr(rawMask);
+            readObjectIsa = function (p) {
+                return readPointer(p).and(mask);
+            };
+        } else {
+            readObjectIsa = function (p) {
+                return readPointer(p);
+            };
+        }
     }
 
     function getMsgSendImpl(signature) {
