@@ -37,6 +37,7 @@ function jsStringToSwift(str, dest) {
 // TODO: call String(reflecting: any).utf8CString
 }*/
 
+// for all these types, look at include/swift/Runtime/Metadata.h and friends in the Swift sources
 
 const TypeMetadataRecordKind = {
     Universal: 0,
@@ -58,6 +59,203 @@ function RelativeDirectPointerIntPair(ptr) {
     };
 }
 
+const MetadataKind = {
+    Class: 0,
+    Struct: 1,
+    Enum: 2,
+    Optional: 3,
+    Opaque: 8,
+    Tuple: 9,
+    Function: 10,
+    Existential: 12,
+    Metatype: 13,
+    ObjCClassWrapper: 14,
+    ExistentialMetatype: 15,
+    ForeignClass: 16,
+    HeapLocalVariable: 64,
+    HeapGenericLocalVariable: 65,
+    ErrorObject: 128,
+};
+function TargetClassMetadata(ptr) {
+    this._ptr = ptr;
+}
+TargetClassMetadata.prototype = {
+    // offset -2 * pointerSize
+    get destructor() {
+        return Memory.readPointer(this._ptr.sub(2 * Process.pointerSize));
+    },
+    // offset -pointerSize
+    get valueWitnessTable() {
+        return Memory.readPointer(this._ptr.sub(Process.pointerSize));
+    },
+
+    // offset 0
+    get isa() {
+        let val = Memory.readPointer(this._ptr);
+        if (val.compare(ptr(4096)) <= 0) {
+            return null;
+        }
+        return val;
+    },
+    // offset pointerSize
+    get superClass() {
+        return new TargetMetadata(Memory.readPointer(this._ptr.add(Process.pointerSize)));
+    },
+    // offset 2*pointerSize
+    get cacheData() {
+        return [
+            Memory.readPointer(this._ptr.add(2 * Process.pointerSize)),
+            Memory.readPointer(this._ptr.add(3 * Process.pointerSize)),
+        ];
+    },
+    // offset 4 * pointerSize
+    get data() {
+        return Memory.readPointer(this._ptr.add(4 * Process.pointerSize));
+    },
+    // offset 5 * pointerSize
+    get flags() {
+        return Memory.readU32(this._ptr.add(5 * Process.pointerSize));
+    },
+    // offset 5 * pointerSize + 4
+    get instanceAddressPoint() {
+        return Memory.readU32(this._ptr.add(4 + 5 * Process.pointerSize));
+    },
+    // offset 5 * pointerSize + 8
+    get instanceSize() {
+        return Memory.readU32(this._ptr.add(8 + 5 * Process.pointerSize));
+    },
+    // offset 5 * pointerSize + 12
+    get instanceAlignMask() {
+        return Memory.readU16(this._ptr.add(12 + 5 * Process.pointerSize));
+    },
+    // offset 5 * pointerSize + 14: reserved
+    // offset 5 * pointerSize + 16
+    get classSize() {
+        return Memory.readU32(this._ptr.add(16 + 5 * Process.pointerSize));
+    },
+    // offset 5 * pointerSize + 20
+    get classAddressPoint() {
+        return Memory.readU32(this._ptr.add(20 + 5 * Process.pointerSize));
+    },
+    // offset 5 * pointerSize + 24
+    get description() {
+        return ConstTargetFarRelativeDirectPointer(this._ptr.add(24 + 5 * Process.pointerSize));
+    },
+    // offset 6 * pointerSize + 24
+    get iVarDestroyer() {
+        return new NativePointer(Memory.readPointer(this._ptr.add(24 + 6 * Process.pointerSize)), 'void', ['pointer']);
+    },
+
+    isTypeMetadata() {
+        return this.data.and(ptr(1)).equals(ptr(1));
+    },
+    isArtificialSubclass() {
+        if(!this.isTypeMetadata())
+            throw Error("assertion error");
+        return this.description.compare(int64(0)) === 0;
+    },
+    getDescription() {
+        if(!this.isTypeMetadata())
+            throw Error("assertion error");
+        if(this.isArtificialSubclass())
+            throw Error("assertion error");
+        return this.description;
+    },
+};
+function TargetValueMetadata(ptr) {
+    this._ptr = ptr;
+}
+TargetValueMetadata.prototype = {
+    // offset pointerSize
+    get description() {
+        let val = ConstTargetFarRelativeDirectPointer(this._ptr.add(Process.pointerSize));
+        if (val.equals(ptr(0)))
+            return null;
+        return val;
+    },
+};
+
+function TargetMetadata(ptr) {
+    this._ptr = ptr;
+}
+TargetMetadata.prototype = {
+    get kind() {
+        let val = Memory.readPointer(this._ptr);
+        if (val.compare(ptr(4096)) > 0) {
+            return MetadataKind.Class;
+        }
+        return val.toInt32();
+    },
+
+    getNominalTypeDescriptor() {
+        let val;
+        switch (this.kind) {
+            case MetadataKind.Class: {
+                let cls = new TargetClassMetadata(this._ptr);
+                if (!cls.isTypeMetadata()) {
+                    return null;
+                }
+                if (cls.isArtificialSubclass()) {
+                    return null;
+                }
+                val = cls.getDescription();
+                break;
+            }
+            case MetadataKind.Struct:
+            case MetadataKind.Enum:
+            case MetadataKind.Optional:
+                val = new TargetValueMetadata(this._ptr).description;
+                break;
+            default:
+                return null;
+        }
+        return new TargetNominalTypeDescriptor(val);
+    },
+};
+
+
+function TargetGenericMetadata(ptr) {
+    this._ptr = ptr;
+}
+TargetGenericMetadata.prototype = {
+    // offset 0
+    get createFunction() {
+        return new NativeFunction(Memory.readPointer(this._ptr.add(0)), 'pointer', ['pointer', 'pointer']);
+    },
+
+    // offset 0+pointerSize
+    get metadataSize() {
+        return Memory.readU32(this._ptr.add(0 + Process.pointerSize));
+    },
+
+    // offset 4+pointerSize
+    get numKeyArguments() {
+        return Memory.readU16(this._ptr.add(4 + Process.pointerSize));
+    },
+
+    // offset 6+pointerSize
+    get addressPoint() {
+        return Memory.readU16(this._ptr.add(6 + Process.pointerSize));
+    },
+
+    // offset 8+pointerSize
+    get privateData() {
+        return Memory.readByteArray(this._ptr.add(8 + Process.pointerSize), 16*Process.pointerSize);
+    },
+
+    getMetadataTemplate() {
+        return this._ptr.add(8 + 17 * Process.pointerSize);
+    },
+
+    getTemplateDescription() {
+        return MetadataKind.readFromMemory(this.getMetadataTemplate().add(this.addressPoint));
+    },
+};
+
+function ConstTargetFarRelativeDirectPointer(ptr) {
+    let offset = Memory.readPointer(ptr);
+    return ptr.add(offset);
+}
 function TargetRelativeDirectPointerRuntime(ptr) {
     let offset = Memory.readS32(ptr);
     return ptr.add(offset);
@@ -68,7 +266,8 @@ function TargetNominalTypeDescriptor(ptr) {
 TargetNominalTypeDescriptor.prototype = {
     // offset 0
     get name() {
-        return Memory.readCString(TargetRelativeDirectPointerRuntime(this._ptr));
+        let addr = TargetRelativeDirectPointerRuntime(this._ptr);
+        return Memory.readCString(addr);
     },
     // offset 4
     get clas() {
@@ -262,19 +461,24 @@ TargetTypeMetadataRecord.prototype = {
     },
 
     getCanonicalTypeMetadata(api) { // returns a Metadata* for non-generic types
+        let res = null;
         switch (this.getTypeKind()) {
             case TypeMetadataRecordKind.UniqueDirectType:
-                return this.getDirectType();
+                res = this.getDirectType();
+                break;
             case TypeMetadataRecordKind.NonuniqueDirectType:
-                return api.swift_getForeignTypeMetadata(this.getDirectType());
+                res = api.swift_getForeignTypeMetadata(this.getDirectType());
+                break;
             case TypeMetadataRecordKind.UniqueDirectClass:
                 let directType = this.getDirectType();
-                if (directType)
-                    return api.swift_getObjCClassMetadata(directType);
-                return null;
+                if (directType) {
+                    res = api.swift_getObjCClassMetadata(directType);
+                }
+                break;
             default:
-                return null;
+                break;
         }
+        return res === null ? null : new TargetMetadata(res);
     },
 }
 
@@ -385,47 +589,73 @@ module.exports = {
         return res;
     },
 
-    getClassMetadata(name) {
+    getClassMetadata() {
         /*// that function only supports classes:
         let cStr = Memory.allocUtf8String(name);
         let type = this._api.swift_getTypeByName(name, name.length);
         return type;*/
         // TODO: manually parse type data
         let sizeAlloc = Memory.alloc(8);
-        let types = [];
+        let names = [];
         for (let mod of Process.enumerateModulesSync()) {
             let sections = [];
             const __TEXT = Memory.allocUtf8String("__TEXT");
             const __swift2_types = Memory.allocUtf8String("__swift2_types");
             const __swift2_proto = Memory.allocUtf8String("__swift2_proto");
             // we don't have to use the name _mh_execute_header to refer to the mach-o header -- it's the module header
-            let ptr = this._api.getsectiondata(mod.base, __TEXT, __swift2_types, sizeAlloc);
-            if (!ptr.isNull())
-                sections.push(["types", ptr, Memory.readULong(sizeAlloc)]);
-            ptr = this._api.getsectiondata(mod.base, __TEXT, __swift2_proto, sizeAlloc);
-            if (!ptr.isNull())
-                sections.push(["protocol conformance", ptr, Memory.readULong(sizeAlloc)]);
+            let pointer = this._api.getsectiondata(mod.base, __TEXT, __swift2_types, sizeAlloc);
+            if (!pointer.isNull())
+                sections.push(["types", pointer, Memory.readULong(sizeAlloc)]);
+            pointer = this._api.getsectiondata(mod.base, __TEXT, __swift2_proto, sizeAlloc);
+            if (!pointer.isNull())
+                sections.push(["protocol conformance", pointer, Memory.readULong(sizeAlloc)]);
             for (let section of sections) {
                 for (let i = 0; i < section[2]; i += 8) {
-                    let metadata;
+                    let name;
                     if (section[0] == "types") {
                         let record = new TargetTypeMetadataRecord(section[1].add(i));
-                        metadata = record.getCanonicalTypeMetadata(this._api);
 
-                        if (metadata === null) {
-                            metadata = record.getNominalTypeDescriptor().name;
-                            //  TODO
+                        let nominalType;
+                        try {
+                            nominalType = record.getNominalTypeDescriptor();
+                        } catch (e) {
+                            nominalType = null;
                         }
+                        if (nominalType === null) {
+                            let canonicalType;
+                            try {
+                                canonicalType = record.getCanonicalTypeMetadata(this._api);
+                            } catch (e) {
+                                canonicalType = null;
+                            }
+                            if (canonicalType !== null) {
+                                let sup = false;
+                                do {
+                                    nominalType = canonicalType.getNominalTypeDescriptor();
+                                    if (nominalType !== null)
+                                        break;
+                                    if (canonicalType.kind !== MetadataKind.Class)
+                                        break;
+                                    let clsType = new TargetClassMetadata(canonicalType._ptr);
+                                    if (clsType.isTypeMetadata() && clsType.isArtificialSubclass() && canonicalType._ptr != clsType.superClass._ptr) {
+                                        sup = true;
+                                        canonicalType = clsType.superClass;
+                                    } else
+                                        break;
+                                } while (true);
+                            }
+                        }
+                        if (!nominalType)
+                            throw Error("no nominal type");
+                        names.push(nominalType.name);
                     } else {
-                        metadata = null;
+                        name = null;
                         // TODO
                     }
-                    if (metadata !== null)
-                        types.push(metadata);
                 }
             }
         }
-        return types;
+        return names;
     },
 
     get _api() {
