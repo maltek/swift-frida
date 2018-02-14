@@ -38,6 +38,176 @@ function jsStringToSwift(str, dest) {
 }*/
 
 // for all these types, look at include/swift/Runtime/Metadata.h and friends in the Swift sources
+function TargetProtocolConformanceRecord(ptr) {
+    this._ptr = ptr;
+}
+TargetProtocolConformanceRecord.prototype = {
+    // offset 0
+    get protocol() {
+        return RelativeIndirectablePointer(this._ptr.add(0));
+    },
+    // offset 4
+    get directType() {
+        return RelativeIndirectablePointer(this._ptr.add(4));
+    },
+    get indirectClass() {
+        return RelativeIndirectablePointer(this._ptr.add(4));
+    },
+    get typeDescriptor() {
+        return RelativeIndirectablePointer(this._ptr.add(4));
+    },
+
+    // offset 8
+    get witnessTable() {
+        return RelativeDirectPointer(this._ptr.add(8));
+    },
+    get witnessTableAccessor() {
+        return RelativeDirectPointer(this._ptr.add(8));
+    },
+
+    // offset 12
+    get flags() {
+        return Memory.readU32(this._ptr.add(12));
+    },
+
+
+    getTypeKind() {
+        const TypeKindMask = 0x0000000F;
+        const TypeKindShift = 0;
+        return (this.flags & TypeKindMask) >>> TypeKindShift; // see TypeMetadataRecordKind
+    },
+    getConformanceKind() {
+        const ConformanceKindMask = 0x00000010;
+        const ConformanceKindShift = 4;
+        return (this.flags & ConformanceKindMask) >>> ConformanceKindShift; // see ProtocolConformanceFlags
+    },
+
+    getDirectType() {
+        switch(this.getTypeKind()) {
+            case TypeMetadataRecordKind.Universal:
+                return null;
+            case TypeMetadataRecordKind.UniqueDirectType:
+            case TypeMetadataRecordKind.NonuniqueDirectType:
+              break;
+
+            case TypeMetadataRecordKind.UniqueDirectClass:
+            case TypeMetadataRecordKind.UniqueIndirectClass:
+            case TypeMetadataRecordKind.UniqueNominalTypeDescriptor:
+              throw Error("not direct type metadata");
+        }
+        return new TargetMetadata(this.directType);
+    },
+
+    getDirectClass() {
+        switch(this.getTypeKind()) {
+            case TypeMetadataRecordKind.Universal:
+                return null;
+            case TypeMetadataRecordKind.UniqueDirectClass:
+              break;
+
+            case TypeMetadataRecordKind.UniqueDirectType:
+            case TypeMetadataRecordKind.NonuniqueDirectType:
+            case TypeMetadataRecordKind.UniqueNominalTypeDescriptor:
+            case TypeMetadataRecordKind.UniqueIndirectClass:
+              throw Error("not direct class object");
+        }
+        return new TargetClassMetadata(this.directType);
+    },
+
+    getIndirectClass() {
+        switch(this.getTypeKind()) {
+            case TypeMetadataRecordKind.Universal:
+                return null;
+            case TypeMetadataRecordKind.UniqueIndirectClass:
+              break;
+
+            case TypeMetadataRecordKind.UniqueDirectType:
+            case TypeMetadataRecordKind.UniqueDirectClass:
+            case TypeMetadataRecordKind.NonuniqueDirectType:
+            case TypeMetadataRecordKind.UniqueNominalTypeDescriptor:
+              throw Error("not indirect class object");
+        }
+        return this.indirectClass;
+    },
+
+    getNominalTypeDescriptor() {
+        switch (this.getTypeKind()) {
+            case TypeMetadataRecordKind.Universal:
+                return null;
+
+            case TypeMetadataRecordKind.UniqueNominalTypeDescriptor:
+                break;
+
+            case TypeMetadataRecordKind.UniqueDirectClass:
+            case TypeMetadataRecordKind.UniqueIndirectClass:
+            case TypeMetadataRecordKind.UniqueDirectType:
+            case TypeMetadataRecordKind.NonuniqueDirectType:
+                throw Error("not generic metadata pattern");
+		}
+
+        return this.typeDescriptor;
+	},
+
+    /// Get the directly-referenced static witness table.
+    getStaticWitnessTable() {
+        switch (this.getConformanceKind()) {
+            case ProtocolConformanceReferenceKind.WitnessTable:
+                break;
+
+            case ProtocolConformanceReferenceKind.WitnessTableAccessor:
+                throw Error("not witness table");
+        }
+        return this.witnessTable;
+    },
+
+    getWitnessTableAccessor() {
+        switch (this.getConformanceKind()) {
+            case ProtocolConformanceReferenceKind.WitnessTableAccessor:
+                break;
+
+            case ProtocolConformanceReferenceKind.WitnessTable:
+                throw Error("not witness table accessor");
+        }
+        return new NativeFunction(this.witnessTableAccessor, 'pointer', ['pointer']);
+    },
+
+    getCanonicalTypeMetadata(api) {
+        let classMetadata = null;
+        switch (this.getTypeKind()) {
+            case TypeMetadataRecordKind.UniqueDirectType:
+                return this.getDirectType();
+            case TypeMetadataRecordKind.NonuniqueDirectType:
+                return api.swift_getForeignTypeMetadata(this.getDirectType());
+            case TypeMetadataRecordKind.UniqueIndirectClass:
+                classMetadata = Memory.readPointer(this.getIndirectClass());
+                break;
+            case TypeMetadataRecordKind.UniqueDirectClass:
+                classMetadata = this.getDirectClass();
+                break;
+            case TypeMetadataRecordKind.UniqueNominalTypeDescriptor:
+            case TypeMetadataRecordKind.Universal:
+                return null;
+        }
+        if (classMetadata !== null && !ptr(0).equals(classMetadata))
+            return api.swift_getObjCClassMetadata(classMetadata);
+        return null;
+    },
+    getWitnessTable(type) {
+        switch (this.getConformanceKind()) {
+            case ProtocolConformanceReferenceKind.WitnessTable:
+                return this.getStaticWitnessTable();
+
+            case ProtocolConformanceReferenceKind.WitnessTableAccessor:
+                return this.getWitnessTableAccessor()(this.type);
+        }
+    },
+};
+const ProtocolConformanceReferenceKind = {
+    WitnessTable: 0,
+    WitnessTableAccessor: 1,
+};
+
+
 
 const TypeMetadataRecordKind = {
     Universal: 0,
@@ -178,6 +348,8 @@ TargetValueMetadata.prototype = {
 function TargetMetadata(ptr) {
     this._ptr = ptr;
 }
+if ("_debug" in global)
+    global.TargetClassMetadata = TargetClassMetadata;
 TargetMetadata.prototype = {
     get kind() {
         let val = Memory.readPointer(this._ptr);
@@ -252,6 +424,17 @@ TargetGenericMetadata.prototype = {
     },
 };
 
+function RelativeIndirectablePointer(addr) {
+    let relativeOffsetPlusIndirect = Memory.readS32(addr);
+    let offset = relativeOffsetPlusIndirect & (~1);
+
+    let val = addr.add(offset);
+    if ((relativeOffsetPlusIndirect & 1) === 0) { // direct reference
+        return val;
+    } else { // indirect reference
+        return Memory.readPointer(val);
+    }
+}
 function ConstTargetFarRelativeDirectPointer(ptr) {
     let offset = Memory.readPointer(ptr);
     return ptr.add(offset);
@@ -610,48 +793,49 @@ module.exports = {
             if (!pointer.isNull())
                 sections.push(["protocol conformance", pointer, Memory.readULong(sizeAlloc)]);
             for (let section of sections) {
-                for (let i = 0; i < section[2]; i += 8) {
-                    let name;
+                for (let i = 0; i < section[2]; i += section[0] == "types" ? 8 : 16) {
+                    let nominalType = null;
+                    let canonicalType = null;
                     if (section[0] == "types") {
                         let record = new TargetTypeMetadataRecord(section[1].add(i));
 
-                        let nominalType;
                         try {
                             nominalType = record.getNominalTypeDescriptor();
                         } catch (e) {
-                            nominalType = null;
                         }
-                        if (nominalType === null) {
-                            let canonicalType;
-                            try {
-                                canonicalType = record.getCanonicalTypeMetadata(this._api);
-                            } catch (e) {
-                                canonicalType = null;
-                            }
-                            if (canonicalType !== null) {
-                                let sup = false;
-                                do {
-                                    nominalType = canonicalType.getNominalTypeDescriptor();
-                                    if (nominalType !== null)
-                                        break;
-                                    if (canonicalType.kind !== MetadataKind.Class)
-                                        break;
-                                    let clsType = new TargetClassMetadata(canonicalType._ptr);
-                                    if (clsType.isTypeMetadata() && clsType.isArtificialSubclass() && canonicalType._ptr != clsType.superClass._ptr) {
-                                        sup = true;
-                                        canonicalType = clsType.superClass;
-                                    } else
-                                        break;
-                                } while (true);
-                            }
+                        try {
+                            canonicalType = record.getCanonicalTypeMetadata(this._api);
+                        } catch (e) {
                         }
-                        if (!nominalType)
-                            throw Error("no nominal type");
-                        names.push(nominalType.name);
                     } else {
-                        name = null;
-                        // TODO
+                        let record = new TargetProtocolConformanceRecord(section[1].add(i));
+                        try {
+                            canonicalType = record.getCanonicalTypeMetadata(this._api);
+                        } catch(e) {
+                        }
                     }
+
+                    if (nominalType === null && canonicalType !== null) {
+                        let sup = false;
+                        do {
+                            nominalType = canonicalType.getNominalTypeDescriptor();
+                            if (nominalType !== null)
+                                break;
+                            if (canonicalType.kind !== MetadataKind.Class)
+                                break;
+                            let clsType = new TargetClassMetadata(canonicalType._ptr);
+                            if (clsType.isTypeMetadata() && clsType.isArtificialSubclass() && canonicalType._ptr != clsType.superClass._ptr) {
+                                sup = true;
+                                canonicalType = clsType.superClass;
+                            } else
+                                break;
+                        } while (true);
+                    }
+                    if (!nominalType)
+                        //console.log("no nominal type");
+                        ;
+                    else
+                        names.push(nominalType.name);
                 }
             }
         }
