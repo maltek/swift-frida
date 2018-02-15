@@ -173,41 +173,27 @@ module.exports = {
                     if (section[0] === "types") {
                         let record = new types.TargetTypeMetadataRecord(section[1].add(i));
 
-                        try {
+                        if (record.getTypeKind() == types.TypeMetadataRecordKind.UniqueNominalTypeDescriptor)
                             nominalType = record.getNominalTypeDescriptor();
-                        } catch (e) {
-                        }
-                        try {
-                            canonicalType = record.getCanonicalTypeMetadata(this._api);
-                        } catch (e) {
-                        }
+                        canonicalType = record.getCanonicalTypeMetadata(this._api);
                     } else {
                         let record = new types.TargetProtocolConformanceRecord(section[1].add(i));
-                        try {
-                            canonicalType = record.getCanonicalTypeMetadata(this._api);
-                        } catch(e) {
-                        }
+                        canonicalType = record.getCanonicalTypeMetadata(this._api);
                     }
 
                     if (nominalType === null && canonicalType !== null) {
-                        do {
-                            nominalType = canonicalType.getNominalTypeDescriptor();
-                            if (nominalType !== null)
-                                break;
-                            if (canonicalType.kind !== MetadataKind.Class)
-                                break;
-                            let clsType = new types.TargetClassMetadata(canonicalType._ptr);
-                            if (clsType.isTypeMetadata() && clsType.isArtificialSubclass() && canonicalType._ptr !== clsType.superClass._ptr) {
-                                canonicalType = clsType.superClass;
-                            } else
-                                break;
-                        } while (true);
+                        nominalType = canonicalType.getNominalTypeDescriptor();
+                        if (canonicalType.kind === types.MetadataKind.Class) {
+                            let clsType = canonicalType.asClassMetadata();
+                            while (nominalType === null && clsType.isTypeMetadata() && clsType.isArtificialSubclass() && clsType.superClass !== null) {
+                                clsType = clsType.superClass;
+                                nominalType = clsType.getNominalTypeDescriptor();
+                            }
+                        }
                     }
-                    if (!nominalType)
-                        //console.log("no nominal type");
-                        ;
-                    else
+                    if (nominalType !== null) {
                         names.push(nominalType.name);
+                    }
                 }
             }
         }

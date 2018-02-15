@@ -78,7 +78,7 @@ TargetProtocolConformanceRecord.prototype = {
             case TypeMetadataRecordKind.UniqueIndirectClass:
               throw Error("not direct class object");
         }
-        return new TargetClassMetadata(this.directType);
+        return this.directType;
     },
 
     getIndirectClass() {
@@ -144,7 +144,7 @@ TargetProtocolConformanceRecord.prototype = {
             case TypeMetadataRecordKind.UniqueDirectType:
                 return this.getDirectType();
             case TypeMetadataRecordKind.NonuniqueDirectType:
-                return api.swift_getForeignTypeMetadata(this.getDirectType());
+                return new TargetMetadata(api.swift_getForeignTypeMetadata(this.getDirectType()._ptr));
             case TypeMetadataRecordKind.UniqueIndirectClass:
                 classMetadata = Memory.readPointer(this.getIndirectClass());
                 break;
@@ -156,7 +156,7 @@ TargetProtocolConformanceRecord.prototype = {
                 return null;
         }
         if (classMetadata !== null && !ptr(0).equals(classMetadata))
-            return api.swift_getObjCClassMetadata(classMetadata);
+            return new TargetMetadata(api.swift_getObjCClassMetadata(classMetadata));
         return null;
     },
     getWitnessTable(type) {
@@ -213,107 +213,161 @@ const MetadataKind = {
     HeapGenericLocalVariable: 65,
     ErrorObject: 128,
 };
-function TargetClassMetadata(ptr) {
-    this._ptr = ptr;
+function TargetClassMetadata(pointer) {
+    TargetMetadata.call(this, pointer);
 }
-TargetClassMetadata.prototype = {
+TargetClassMetadata.prototype = Object.create(TargetMetadata.prototype, {
     // offset -2 * pointerSize
-    get destructor() {
-        return Memory.readPointer(this._ptr.sub(2 * Process.pointerSize));
+    destructor: {
+        get() {
+            return Memory.readPointer(this._ptr.sub(2 * Process.pointerSize));
+        },
+        enumerable: true,
     },
     // offset -pointerSize
-    get valueWitnessTable() {
-        return Memory.readPointer(this._ptr.sub(Process.pointerSize));
+    valueWitnessTable: {
+        get() {
+            return Memory.readPointer(this._ptr.sub(Process.pointerSize));
+        },
+        enumerable: true,
     },
 
     // offset 0
-    get isa() {
-        let val = Memory.readPointer(this._ptr);
-        if (val.compare(ptr(4096)) <= 0) {
-            return null;
-        }
-        return val;
+    isa: {
+        get() {
+            let val = Memory.readPointer(this._ptr);
+            if (val.compare(ptr(4096)) <= 0) {
+                return null;
+            }
+            return val;
+        },
+        enumerable: true,
     },
     // offset pointerSize
-    get superClass() {
-        return new TargetMetadata(Memory.readPointer(this._ptr.add(Process.pointerSize)));
+    superClass: {
+        get() {
+            return new TargetClassMetadata(Memory.readPointer(this._ptr.add(Process.pointerSize)));
+        },
+        enumerable: true,
     },
     // offset 2*pointerSize
-    get cacheData() {
-        return [
-            Memory.readPointer(this._ptr.add(2 * Process.pointerSize)),
-            Memory.readPointer(this._ptr.add(3 * Process.pointerSize)),
-        ];
+    cacheData: {
+        get() {
+            return [
+                Memory.readPointer(this._ptr.add(2 * Process.pointerSize)),
+                Memory.readPointer(this._ptr.add(3 * Process.pointerSize)),
+            ];
+        },
+        enumerable: true,
     },
     // offset 4 * pointerSize
-    get data() {
-        return Memory.readPointer(this._ptr.add(4 * Process.pointerSize));
+    data: {
+        get() {
+            return Memory.readPointer(this._ptr.add(4 * Process.pointerSize));
+        },
+        enumerable: true,
     },
     // offset 5 * pointerSize
-    get flags() {
-        return Memory.readU32(this._ptr.add(5 * Process.pointerSize));
+    flags: {
+        get() {
+            return Memory.readU32(this._ptr.add(5 * Process.pointerSize));
+        },
+        enumerable: true,
     },
     // offset 5 * pointerSize + 4
-    get instanceAddressPoint() {
-        return Memory.readU32(this._ptr.add(4 + 5 * Process.pointerSize));
+    instanceAddressPoint: {
+        get() {
+            return Memory.readU32(this._ptr.add(4 + 5 * Process.pointerSize));
+        },
+        enumerable: true,
     },
     // offset 5 * pointerSize + 8
-    get instanceSize() {
-        return Memory.readU32(this._ptr.add(8 + 5 * Process.pointerSize));
+    instanceSize: {
+        get() {
+            return Memory.readU32(this._ptr.add(8 + 5 * Process.pointerSize));
+        },
+        enumerable: true,
     },
     // offset 5 * pointerSize + 12
-    get instanceAlignMask() {
-        return Memory.readU16(this._ptr.add(12 + 5 * Process.pointerSize));
+    instanceAlignMask: {
+        get() {
+            return Memory.readU16(this._ptr.add(12 + 5 * Process.pointerSize));
+        },
+        enumerable: true,
     },
     // offset 5 * pointerSize + 14: reserved
     // offset 5 * pointerSize + 16
-    get classSize() {
-        return Memory.readU32(this._ptr.add(16 + 5 * Process.pointerSize));
+    classSize: {
+        get() {
+            return Memory.readU32(this._ptr.add(16 + 5 * Process.pointerSize));
+        },
+        enumerable: true,
     },
     // offset 5 * pointerSize + 20
-    get classAddressPoint() {
-        return Memory.readU32(this._ptr.add(20 + 5 * Process.pointerSize));
+    classAddressPoint: {
+        get() {
+            return Memory.readU32(this._ptr.add(20 + 5 * Process.pointerSize));
+        },
+        enumerable: true,
     },
     // offset 5 * pointerSize + 24
-    get description() {
-        return ConstTargetFarRelativeDirectPointer(this._ptr.add(24 + 5 * Process.pointerSize));
+    description: {
+        get() {
+            return ConstTargetFarRelativeDirectPointer(this._ptr.add(24 + 5 * Process.pointerSize));
+        },
+        enumerable: true,
     },
     // offset 6 * pointerSize + 24
-    get iVarDestroyer() {
-        return new NativePointer(Memory.readPointer(this._ptr.add(24 + 6 * Process.pointerSize)), 'void', ['pointer']);
+    iVarDestroyer: {
+        get() {
+            return new NativePointer(Memory.readPointer(this._ptr.add(24 + 6 * Process.pointerSize)), 'void', ['pointer']);
+        },
+        enumerable: true,
     },
 
-    isTypeMetadata() {
-        return this.data.and(ptr(1)).equals(ptr(1));
+    isTypeMetadata: {
+        value: function() {
+            return this.data.and(ptr(1)).equals(ptr(1));
+        },
+        enumerable: true,
     },
-    isArtificialSubclass() {
-        if(!this.isTypeMetadata())
-            throw Error("assertion error");
-        return this.description.compare(int64(0)) === 0;
+    isArtificialSubclass: {
+        value: function() {
+            if(!this.isTypeMetadata())
+                throw Error("assertion error");
+            return this.description.compare(int64(0)) === 0;
+        },
+        enumerable: true,
     },
-    getDescription() {
-        if(!this.isTypeMetadata())
-            throw Error("assertion error");
-        if(this.isArtificialSubclass())
-            throw Error("assertion error");
-        return this.description;
+    getDescription: {
+        value: function() {
+            if(!this.isTypeMetadata())
+                throw Error("assertion error");
+            if(this.isArtificialSubclass())
+                throw Error("assertion error");
+            return this.description;
+        },
+        enumerable: true,
     },
-};
-function TargetValueMetadata(ptr) {
-    this._ptr = ptr;
+});
+function TargetValueMetadata(pointer) {
+    TargetMetadata.call(this, pointer);
 }
-TargetValueMetadata.prototype = {
+TargetValueMetadata.prototype = Object.create(TargetMetadata.prototype, {
     // offset pointerSize
-    get description() {
-        let val = ConstTargetFarRelativeDirectPointer(this._ptr.add(Process.pointerSize));
-        if (val.equals(ptr(0)))
-            return null;
-        return val;
+    description: {
+        get() {
+            let val = ConstTargetFarRelativeDirectPointer(this._ptr.add(Process.pointerSize));
+            if (val.equals(ptr(0)))
+                return null;
+            return val;
+        },
+        enumerable: true,
     },
-};
+});
 
-function TargetMetadata(ptr) {
-    this._ptr = ptr;
+function TargetMetadata(pointer) {
+    this._ptr = pointer;
 }
 if ("_debug" in global)
     global.TargetClassMetadata = TargetClassMetadata;
@@ -349,6 +403,23 @@ TargetMetadata.prototype = {
                 return null;
         }
         return new TargetNominalTypeDescriptor(val);
+    },
+
+    asClassMetadata() {
+        if (this.kind === MetadataKind.Class)
+            return new TargetClassMetadata(this._ptr);
+        throw Error("type is not a class type");
+    },
+
+    asValueMetadata() {
+        switch (this.kind) {
+            case MetadataKind.Struct:
+            case MetadataKind.Enum:
+            case MetadataKind.Optional: // TODO: is this correct?
+                return new TargetValueMetadata(this._ptr);
+            default:
+                throw Error("type is not a class type");
+        }
     },
 };
 
@@ -636,4 +707,6 @@ module.exports = {
     TargetClassMetadata: TargetClassMetadata,
     TargetProtocolConformanceRecord: TargetProtocolConformanceRecord,
     TargetTypeMetadataRecord: TargetTypeMetadataRecord,
+    MetadataKind: MetadataKind,
+    TypeMetadataRecordKind: TypeMetadataRecordKind,
 };
