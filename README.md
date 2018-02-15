@@ -16,7 +16,7 @@ Right now, the following functions are available in the `Swift` namespace, when 
  * `available` allows you to check if the current process uses Swift. Don't use any of the other functions here if this property is `false`.
  * `isSwiftFunction(name)` Takes a function/symbol name (like you can get from `Module` objects), and returns a boolean indicating whether it is a mangled Swift name or not.
  * `demangle(name)` Takes a mangled Swift name (like you can get from `Module` objects), and returns a demangled, human-readable String for it.
- * `getClassMetadata()` Returns an array of the names (for now) of all Swift data types defined in the Swift program.
+ * `enumerateTypesSync()` Returns an array with the names of all Swift data types defined in the Swift program.
 
 But, again, this is completely unstable and might change at any time. There's also some other stuff there, but those are just API sketches of what might maybe come in future.
 

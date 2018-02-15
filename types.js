@@ -157,7 +157,7 @@ TargetProtocolConformanceRecord.prototype = {
             case TypeMetadataRecordKind.Universal:
                 return null;
         }
-        if (classMetadata !== null && !ptr(0).equals(classMetadata))
+        if (classMetadata !== null && !classMetadata.isNull())
             return new TargetMetadata(api.swift_getObjCClassMetadata(classMetadata));
         return null;
     },
@@ -362,7 +362,7 @@ TargetValueMetadata.prototype = Object.create(TargetMetadata.prototype, {
     description: {
         get() {
             let val = ConstTargetFarRelativeDirectPointer(this._ptr.add(Process.pointerSize));
-            if (val.equals(ptr(0)))
+            if (val.isNull())
                 return null;
             return val;
         },

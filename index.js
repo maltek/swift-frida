@@ -147,34 +147,33 @@ module.exports = {
         return res;
     },
 
-    getClassMetadata() {
+    enumerateTypesSync() {
         // TODO: manually parse type data
         let sizeAlloc = Memory.alloc(8);
         let names = [];
+        const __TEXT = Memory.allocUtf8String("__TEXT");
+        const __swift2_types = Memory.allocUtf8String("__swift2_types");
+        const __swift2_proto = Memory.allocUtf8String("__swift2_proto");
+
         for (let mod of Process.enumerateModulesSync()) {
-            let sections = [];
-            const __TEXT = Memory.allocUtf8String("__TEXT");
-            const __swift2_types = Memory.allocUtf8String("__swift2_types");
-            const __swift2_proto = Memory.allocUtf8String("__swift2_proto");
-            // we don't have to use the name _mh_execute_header to refer to the mach-o header -- it's the module header
-            let pointer = this._api.getsectiondata(mod.base, __TEXT, __swift2_types, sizeAlloc);
-            if (!pointer.isNull())
-                sections.push(["types", pointer, Memory.readULong(sizeAlloc)]);
-            pointer = this._api.getsectiondata(mod.base, __TEXT, __swift2_proto, sizeAlloc);
-            if (!pointer.isNull())
-                sections.push(["protocol conformance", pointer, Memory.readULong(sizeAlloc)]);
-            for (let section of sections) {
-                for (let i = 0; i < section[2]; i += section[0] === "types" ? 8 : 16) {
+            for (let [section, what] of [[__swift2_types, "types"], [__swift2_proto, "protocol conformance"]]) {
+                // we don't have to use the name _mh_execute_header to refer to the mach-o header -- it's the module header
+                let pointer = this._api.getsectiondata(mod.base, __TEXT, section, sizeAlloc);
+                if (pointer.isNull())
+                    continue;
+
+                let sectionSize = Memory.readULong(sizeAlloc);
+                for (let i = 0; i < sectionSize; i += what === "types" ? 8 : 16) {
                     let nominalType = null;
                     let canonicalType = null;
-                    if (section[0] === "types") {
-                        let record = new types.TargetTypeMetadataRecord(section[1].add(i));
+                    if (what === "types") {
+                        let record = new types.TargetTypeMetadataRecord(pointer.add(i));
 
                         if (record.getTypeKind() == types.TypeMetadataRecordKind.UniqueNominalTypeDescriptor)
                             nominalType = record.getNominalTypeDescriptor();
                         canonicalType = record.getCanonicalTypeMetadata(this._api);
                     } else {
-                        let record = new types.TargetProtocolConformanceRecord(section[1].add(i));
+                        let record = new types.TargetProtocolConformanceRecord(pointer.add(i));
                         canonicalType = record.getCanonicalTypeMetadata(this._api);
                     }
 
