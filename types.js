@@ -2,6 +2,8 @@
 
 /* jshint esnext: true, evil: true */
 
+const mangling = require('./mangling');
+
 // for all these definitions, look at include/swift/Runtime/Metadata.h and friends in the Swift sources
 // based on commit 2035c311736d15c9ef1a7e2e42a925a6ddae098c
 
@@ -197,10 +199,12 @@ function RelativeDirectPointerIntPair(ptr) {
 }
 
 const MetadataKind = {
+    // TODO: these first values should be NominalTypeKind
     Class: 0,
     Struct: 1,
     Enum: 2,
     Optional: 3,
+
     Opaque: 8,
     Tuple: 9,
     Function: 10,
@@ -486,9 +490,9 @@ function TargetNominalTypeDescriptor(ptr) {
 }
 TargetNominalTypeDescriptor.prototype = {
     // offset 0
-    get name() {
+    get mangledName() {
         let addr = TargetRelativeDirectPointerRuntime(this._ptr);
-        return Memory.readCString(addr);
+        return mangling.MANGLING_PREFIX + Memory.readCString(addr);
     },
     // offset 4
     get clas() {

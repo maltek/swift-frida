@@ -2,7 +2,8 @@
 
 /* jshint esnext: true, evil: true */
 
-let types = require('./types');
+const types = require('./types');
+const mangling = require('./mangling');
 
 let size_t = Process.pointerSize === 8 ? 'uint64' : Process.pointerSize === 4 ? 'uint32' : "unsupported platform";
 
@@ -98,7 +99,7 @@ module.exports = {
 
     isSwiftFunction(func) {
         let name = func.name || func;
-        return name.startsWith('_T');
+        return name.startsWith(mangling.MANGLING_PREFIX);
     },
 
     // like Interceptor.attach, but with type information, so you get nice wrappers around the Swift values
@@ -133,7 +134,7 @@ module.exports = {
 
     demangle(name) {
         if (!this.isSwiftFunction(name))
-            throw Error("function name is not a mangled Swift function");
+            throw Error("function name '" + name + "' is not a mangled Swift function");
 
         let cStr = Memory.allocUtf8String(name);
         let demangled = this._api.swift_demangle(cStr, name.length, ptr(0), ptr(0), 0);
@@ -147,10 +148,6 @@ module.exports = {
     },
 
     getClassMetadata() {
-        /*// that function only supports classes:
-        let cStr = Memory.allocUtf8String(name);
-        let type = this._api.swift_getTypeByName(name, name.length);
-        return type;*/
         // TODO: manually parse type data
         let sizeAlloc = Memory.alloc(8);
         let names = [];
@@ -192,7 +189,7 @@ module.exports = {
                         }
                     }
                     if (nominalType !== null) {
-                        names.push(nominalType.name);
+                        names.push(this.demangle(nominalType.mangledName));
                     }
                 }
             }
