@@ -7,6 +7,57 @@ const mangling = require('./mangling');
 // for all these definitions, look at include/swift/Runtime/Metadata.h and friends in the Swift sources
 // based on commit 2035c311736d15c9ef1a7e2e42a925a6ddae098c
 
+const ValueWitnessFlags = {
+    AlignmentMask: 0x0000FFFF,
+    IsNonPOD: 0x00010000,
+    IsNonInline: 0x00020000,
+    HasExtraInhabitants: 0x00040000,
+    HasSpareBits: 0x00080000,
+    IsNonBitwiseTakable: 0x00100000,
+    HasEnumWitnesses: 0x00200000,
+};
+
+function TypeLayout(pointer) {
+    this._ptr = pointer;
+}
+TypeLayout.prototype = {
+    // offset 0
+    get size() {
+        return Memory.readPointer(this._ptr.add(0));
+    },
+    // offset pointerSize
+    get flags() {
+        return Memory.readPointer(this._ptr.add(Process.pointerSize));
+    },
+    // offset 2* pointerSize
+    get stride() {
+        return Memory.readPointer(this._ptr.add(2 * Process.pointerSize));
+    },
+    // offset 3* pointerSize
+    get extraInhabitantFlags() {
+        if (this.flags.and(ValueWitnessFlags.HasExtraInhabitants).isNull())
+            throw Error("extra inhabitant flags not available");
+        return Memory.readPointer(this._ptr.add(3 * Process.pointerSize));
+    },
+};
+function ValueWitnessTable(pointer) {
+    TypeLayout.call(this, pointer.add(17 * Process.pointerSize));
+    this._vwt = pointer;
+}
+ValueWitnessTable.prototype = Object.create(TypeLayout.prototype, {
+    isValueInline: {
+        value: function(size, alignment) {
+            if (size !== undefined && alignment !== undefined)
+                return (size <= 3 * Process.pointerSize && alignment <= Process.pointerSize);
+            else if (size !== undefined)
+                throw Error("no overload with 1 argument");
+            else
+                return !(this.flags & ValueWitnessFlags.IsNonInline);
+        },
+        enumerable: true,
+    },
+});
+
 function TargetProtocolConformanceRecord(ptr) {
     this._ptr = ptr;
 }
@@ -176,6 +227,12 @@ const ProtocolConformanceReferenceKind = {
     WitnessTableAccessor: 1,
 };
 
+const FieldTypeFlags = {
+    Indirect: 1,
+    Weak: 2,
+
+    typeMask: 0x3,
+};
 
 
 const TypeMetadataRecordKind = {
@@ -197,9 +254,14 @@ function RelativeDirectPointerIntPair(ptr) {
         intVal: val & 0x3,
     };
 }
+const NominalTypeKind = {
+    Class: 0,
+    Struct: 1,
+    Enum: 2,
+    Optional: 3,
+};
 
 const MetadataKind = {
-    // TODO: these first values should be NominalTypeKind
     Class: 0,
     Struct: 1,
     Enum: 2,
@@ -217,9 +279,64 @@ const MetadataKind = {
     HeapGenericLocalVariable: 65,
     ErrorObject: 128,
 };
-function TargetClassMetadata(pointer) {
-    TargetMetadata.call(this, pointer);
+
+function TargetMetadata(pointer) {
+    this._ptr = pointer;
+    switch (this.kind) {
+        case MetadataKind.Class:
+            return new TargetClassMetadata(pointer);
+        case MetadataKind.Struct:
+        case MetadataKind.Enum:
+        case MetadataKind.Optional:
+            return new TargetValueMetadata(pointer);
+    }
 }
+TargetMetadata.prototype = {
+    get kind() {
+        let val = Memory.readPointer(this._ptr);
+        if (val.compare(ptr(4096)) > 0) {
+            return MetadataKind.Class;
+        }
+        return val.toInt32();
+    },
+
+    getNominalTypeDescriptor() {
+        let val;
+        switch (this.kind) {
+            case MetadataKind.Class: {
+                let cls = new TargetClassMetadata(this._ptr);
+                if (!cls.isTypeMetadata()) {
+                    return null;
+                }
+                if (cls.isArtificialSubclass()) {
+                    return null;
+                }
+                val = cls.getDescription();
+                break;
+            }
+            case MetadataKind.Struct:
+            case MetadataKind.Enum:
+            case MetadataKind.Optional:
+                val = new TargetValueMetadata(this._ptr).description;
+                break;
+            default:
+                return null;
+        }
+        return new TargetNominalTypeDescriptor(val);
+    },
+
+    toString() {
+        let kind = Object.getOwnPropertyNames(MetadataKind).filter(k => MetadataKind[k] == this.kind)[0];
+        return "[TargetMetadata: " + kind + "@" + this._ptr + "]";
+    },
+};
+function TargetClassMetadata(pointer) {
+    this._ptr = pointer;
+    if (this.kind !== MetadataKind.Class)
+        throw Error("type is not a class type");
+}
+if ("_debug" in global)
+    global.TargetClassMetadata = TargetClassMetadata;
 TargetClassMetadata.prototype = Object.create(TargetMetadata.prototype, {
     // offset -2 * pointerSize
     destructor: {
@@ -231,7 +348,7 @@ TargetClassMetadata.prototype = Object.create(TargetMetadata.prototype, {
     // offset -pointerSize
     valueWitnessTable: {
         get() {
-            return Memory.readPointer(this._ptr.sub(Process.pointerSize));
+            return new ValueWitnessTable(Memory.readPointer(this._ptr.sub(Process.pointerSize)));
         },
         enumerable: true,
     },
@@ -335,6 +452,12 @@ TargetClassMetadata.prototype = Object.create(TargetMetadata.prototype, {
         },
         enumerable: true,
     },
+    isPureObjC: {
+        value: function() {
+            return !this.isTypeMetadata();
+        },
+        enumerable: true,
+    },
     isArtificialSubclass: {
         value: function() {
             if(!this.isTypeMetadata())
@@ -353,9 +476,27 @@ TargetClassMetadata.prototype = Object.create(TargetMetadata.prototype, {
         },
         enumerable: true,
     },
+    getNominalTypeDescriptor: {
+        value: function() {
+            if (this.isTypeMetadata() && !this.isArtificialSubclass())
+                return new TargetNominalTypeDescriptor(this.getDescription());
+            else
+                return TargetMetadata.prototype.getNominalTypeDescriptor.call(this);
+        },
+        enumerable: true,
+    },
 });
 function TargetValueMetadata(pointer) {
-    TargetMetadata.call(this, pointer);
+    this._ptr = pointer;
+
+    switch (this.kind) {
+        case MetadataKind.Struct:
+        case MetadataKind.Enum:
+        case MetadataKind.Optional:
+            break;
+        default:
+            throw Error("type is not a value type");
+    }
 }
 TargetValueMetadata.prototype = Object.create(TargetMetadata.prototype, {
     // offset pointerSize
@@ -369,63 +510,6 @@ TargetValueMetadata.prototype = Object.create(TargetMetadata.prototype, {
         enumerable: true,
     },
 });
-
-function TargetMetadata(pointer) {
-    this._ptr = pointer;
-}
-if ("_debug" in global)
-    global.TargetClassMetadata = TargetClassMetadata;
-TargetMetadata.prototype = {
-    get kind() {
-        let val = Memory.readPointer(this._ptr);
-        if (val.compare(ptr(4096)) > 0) {
-            return MetadataKind.Class;
-        }
-        return val.toInt32();
-    },
-
-    getNominalTypeDescriptor() {
-        let val;
-        switch (this.kind) {
-            case MetadataKind.Class: {
-                let cls = new TargetClassMetadata(this._ptr);
-                if (!cls.isTypeMetadata()) {
-                    return null;
-                }
-                if (cls.isArtificialSubclass()) {
-                    return null;
-                }
-                val = cls.getDescription();
-                break;
-            }
-            case MetadataKind.Struct:
-            case MetadataKind.Enum:
-            case MetadataKind.Optional:
-                val = new TargetValueMetadata(this._ptr).description;
-                break;
-            default:
-                return null;
-        }
-        return new TargetNominalTypeDescriptor(val);
-    },
-
-    asClassMetadata() {
-        if (this.kind === MetadataKind.Class)
-            return new TargetClassMetadata(this._ptr);
-        throw Error("type is not a class type");
-    },
-
-    asValueMetadata() {
-        switch (this.kind) {
-            case MetadataKind.Struct:
-            case MetadataKind.Enum:
-            case MetadataKind.Optional: // TODO: is this correct?
-                return new TargetValueMetadata(this._ptr);
-            default:
-                throw Error("type is not a class type");
-        }
-    },
-};
 
 
 function TargetGenericMetadata(ptr) {
@@ -498,6 +582,8 @@ TargetNominalTypeDescriptor.prototype = {
     get clas() {
         let ptr = this._ptr.add(4);
         return {
+            _ptr: ptr,
+
             // offset 0
             get numFields() {
                 return Memory.readU32(ptr.add(0));
@@ -571,7 +657,12 @@ TargetNominalTypeDescriptor.prototype = {
 
     // offset 20
     get accessFunction() {
-        return RelativeDirectPointer(this._ptr.add(20)); // the type of this function depends on the generic requirements of this type
+        let args = [];
+        // the type of this function depends on the generic requirements of this type
+        for (let i = 0; i < this.genericParams.numGenericRequirements; i++) {
+            args.push('pointer');
+        }
+        return new NativeFunction(TargetRelativeDirectPointerRuntime(this._ptr.add(21)), 'pointer', args);
     },
 
     getGenericMetadataPattern() {
@@ -587,7 +678,7 @@ TargetNominalTypeDescriptor.prototype = {
     },
 
     // offset 24
-    get GenericParams() {
+    get genericParams() {
         let ptr = this._ptr.add(24);
         const GenericParameterDescriptorFlags = {
             HasParent: 1,
@@ -612,13 +703,17 @@ TargetNominalTypeDescriptor.prototype = {
             },
 
             hasGenericRequirements() {
-                return this.numPrimaryParams > 0;
+                return this.numGenericRequirements > 0;
             },
 
             isGeneric() {
                 return this.hasGenericRequirements() || (this.flags & GenericParameterDescriptorFlags.HasGenericParent) !== 0;
             },
         };
+    },
+
+    toString() {
+        return "[TargetNominalType@" + this._ptr + ": " + this.mangledName + "]";
     },
 };
 
@@ -708,9 +803,13 @@ TargetTypeMetadataRecord.prototype = {
 }
 
 module.exports = {
+    TargetMetadata: TargetMetadata,
     TargetClassMetadata: TargetClassMetadata,
     TargetProtocolConformanceRecord: TargetProtocolConformanceRecord,
     TargetTypeMetadataRecord: TargetTypeMetadataRecord,
     MetadataKind: MetadataKind,
+    NominalTypeKind: NominalTypeKind,
+    TargetNominalTypeDescriptor: TargetNominalTypeDescriptor,
     TypeMetadataRecordKind: TypeMetadataRecordKind,
+    FieldTypeFlags: FieldTypeFlags,
 };

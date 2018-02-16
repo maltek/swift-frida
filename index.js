@@ -7,6 +7,12 @@ const mangling = require('./mangling');
 
 let size_t = Process.pointerSize === 8 ? 'uint64' : Process.pointerSize === 4 ? 'uint32' : "unsupported platform";
 
+function strlen(pointer) {
+    let i;
+    for (i = 0; Memory.readU8(pointer.add(i)) !== 0; i++) {
+    }
+    return i;
+}
 
 let _api = null;
 
@@ -91,6 +97,136 @@ Signature.prototype = {
     }
 };
 
+function Type(nominalType, canonicalType) {
+    this.nominalType = nominalType;
+    if (!canonicalType & !this.hasGenericRequirements()) {
+        return this.withGenericParams();
+    }
+    if (!nominalType && canonicalType) {
+        this.nominalType = canonicalType.getNominalTypeDescriptor();
+        if (canonicalType.kind === types.MetadataKind.Class) {
+            let clsType = canonicalType;
+            while (this.nominalType === null && clsType.isTypeMetadata() && clsType.isArtificialSubclass() && clsType.superClass !== null) {
+                clsType = clsType.superClass;
+                this.nominalType = clsType.getNominalTypeDescriptor();
+            }
+        }
+    }
+    this.canonicalType = canonicalType;
+}
+Type.prototype = {
+    hasGenericRequirements() {
+        if (!this.nominalType || this.canonicalType)
+            return false;
+        return this.nominalType.genericParams.hasGenericRequirements();
+    },
+    withGenericParams(...params) {
+        if (params.length != this.nominalType.genericParams.numGenericRequirements)
+            throw Error("wrong number of generic parameters");
+
+        for (let param of params) {
+            if (param.hasGenericRequirements())
+                throw Error("generic type parameter needs all own type parameters filled!");
+        }
+        let canonical = this.nominalType.accessFunction.apply(null, params.map(t => t.canonicalType));
+        return new Type(this.nominalType, new types.TargetMetadata(canonical));
+    },
+    fields() {
+        if (this.nominalType === null)
+            return [];
+        if (this.canonicalType === null)
+            throw Error("fields can only be accessed for fully concrete types");
+
+        let fields = [];
+        let info;
+        switch (this.nominalType.getKind()) {
+            case types.NominalTypeKind.Class:
+                info = this.nominalType.clas;
+                break;
+            case types.NominalTypeKind.Struct:
+                info = this.nominalType.struct;
+                break;
+            default:
+                return fields;
+        }
+        if (!info.hasFieldOffsetVector())
+            return fields;
+
+
+        let fieldTypeAccessor = new NativeFunction(info.getFieldTypes, 'pointer', ['pointer']);
+        let fieldTypes = fieldTypeAccessor(this.canonicalType._ptr);
+
+        let fieldName = info.fieldNames;
+        let fieldOffsets = this.canonicalType._ptr.add(info.fieldOffsetVectorOffset * Process.pointerSize);
+        for (let i = 0; i < info.numFields; i++) {
+            let type = Memory.readPointer(fieldTypes.add(i * Process.pointerSize));
+            let typeFlags = type.and(types.FieldTypeFlags.typeMask);
+            type = new types.TargetMetadata(type.and(~types.FieldTypeFlags.typeMask));
+
+            fields.push({
+                name: Memory.readUtf8String(fieldName),
+                offset: Memory.readPointer(fieldOffsets.add(i * Process.pointerSize)),
+                type: new Type(null, type),
+                indirect: (typeFlags & types.FieldTypeFlags.Indirect) === types.FieldTypeFlags.Indirect,
+                weak: (typeFlags & types.FieldTypeFlags.Weak) === types.FieldTypeFlags.Weak,
+            });
+            fieldName = fieldName.add(strlen(fieldName) + 1);
+        }
+        return fields;
+    },
+
+    toString() {
+        let canon = this.canonicalType ? this.canonicalType.toString() : "null";
+        let nomin = this.nominalType ? this.nominalType.toString() : "null";
+        return "Type {\n\
+    canonicalType: " + canon + "\n\
+    nominalType: " + nomin + "\n\
+}";
+    },
+};
+
+
+function findAllTypes(api) {
+    let sizeAlloc = Memory.alloc(8);
+    let found = [];
+    const __TEXT = Memory.allocUtf8String("__TEXT");
+    const __swift2_types = Memory.allocUtf8String("__swift2_types");
+    const __swift2_proto = Memory.allocUtf8String("__swift2_proto");
+
+    const recordSizes = {
+        'types': 8,
+        'protocol conformance': 16,
+    };
+
+    for (let mod of Process.enumerateModulesSync()) {
+        for (let [section, what] of [[__swift2_types, "types"], [__swift2_proto, "protocol conformance"]]) {
+            // we don't have to use the name _mh_execute_header to refer to the mach-o header -- it's the module header
+            let pointer = api.getsectiondata(mod.base, __TEXT, section, sizeAlloc);
+            if (pointer.isNull())
+                continue;
+
+            let sectionSize = Memory.readULong(sizeAlloc);
+            for (let i = 0; i < sectionSize; i += recordSizes[what]) {
+                let nominalType = null;
+                let record;
+                if (what === "types") {
+                    record = new types.TargetTypeMetadataRecord(pointer.add(i));
+
+                    if (record.getTypeKind() == types.TypeMetadataRecordKind.UniqueNominalTypeDescriptor)
+                        nominalType = record.getNominalTypeDescriptor();
+                } else {
+                    record = new types.TargetProtocolConformanceRecord(pointer.add(i));
+                }
+                let canonicalType = record.getCanonicalTypeMetadata(api);
+
+                if (nominalType || canonicalType)
+                    found.push(new Type(nominalType, canonicalType));
+            }
+        }
+    }
+    return found;
+}
+
 module.exports = {
 
     get available() {
@@ -147,53 +283,17 @@ module.exports = {
         return res;
     },
 
+    _typesByName: null,
     enumerateTypesSync() {
-        // TODO: manually parse type data
-        let sizeAlloc = Memory.alloc(8);
-        let names = [];
-        const __TEXT = Memory.allocUtf8String("__TEXT");
-        const __swift2_types = Memory.allocUtf8String("__swift2_types");
-        const __swift2_proto = Memory.allocUtf8String("__swift2_proto");
-
-        for (let mod of Process.enumerateModulesSync()) {
-            for (let [section, what] of [[__swift2_types, "types"], [__swift2_proto, "protocol conformance"]]) {
-                // we don't have to use the name _mh_execute_header to refer to the mach-o header -- it's the module header
-                let pointer = this._api.getsectiondata(mod.base, __TEXT, section, sizeAlloc);
-                if (pointer.isNull())
-                    continue;
-
-                let sectionSize = Memory.readULong(sizeAlloc);
-                for (let i = 0; i < sectionSize; i += what === "types" ? 8 : 16) {
-                    let nominalType = null;
-                    let canonicalType = null;
-                    if (what === "types") {
-                        let record = new types.TargetTypeMetadataRecord(pointer.add(i));
-
-                        if (record.getTypeKind() == types.TypeMetadataRecordKind.UniqueNominalTypeDescriptor)
-                            nominalType = record.getNominalTypeDescriptor();
-                        canonicalType = record.getCanonicalTypeMetadata(this._api);
-                    } else {
-                        let record = new types.TargetProtocolConformanceRecord(pointer.add(i));
-                        canonicalType = record.getCanonicalTypeMetadata(this._api);
-                    }
-
-                    if (nominalType === null && canonicalType !== null) {
-                        nominalType = canonicalType.getNominalTypeDescriptor();
-                        if (canonicalType.kind === types.MetadataKind.Class) {
-                            let clsType = canonicalType.asClassMetadata();
-                            while (nominalType === null && clsType.isTypeMetadata() && clsType.isArtificialSubclass() && clsType.superClass !== null) {
-                                clsType = clsType.superClass;
-                                nominalType = clsType.getNominalTypeDescriptor();
-                            }
-                        }
-                    }
-                    if (nominalType !== null) {
-                        names.push(this.demangle(nominalType.mangledName));
-                    }
-                }
+        let typesByName = new Map();
+        for (let type of findAllTypes(this._api)) {
+            if (type.nominalType !== null) {
+                let name = this.demangle(type.nominalType.mangledName);
+                typesByName.set(name, type);
             }
         }
-        return names;
+        this._typesByName = typesByName;
+        return Array.from(typesByName.keys());
     },
 
     get _api() {

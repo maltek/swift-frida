@@ -28,4 +28,4 @@ Process.enumerateModulesSync().forEach(function(m) {
 });
 global.all_fns = all_fns;
 global.func_locs = func_locs;
-console.log(Swift.enumerateTypesSync().join("\n"));
+console.log(Swift.enumerateTypesSync().filter(x => x.indexOf("bool") !== -1).join("\n"));
