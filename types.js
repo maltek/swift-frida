@@ -289,6 +289,8 @@ function TargetMetadata(pointer) {
         case MetadataKind.Enum:
         case MetadataKind.Optional:
             return new TargetValueMetadata(pointer);
+        case MetadataKind.Tuple:
+            return new TargetTupleTypeMetadata(pointer);
     }
 }
 TargetMetadata.prototype = {
@@ -547,6 +549,53 @@ TargetGenericMetadata.prototype = {
 
     getTemplateDescription() {
         return MetadataKind.readFromMemory(this.getMetadataTemplate().add(this.addressPoint));
+    },
+};
+function TargetTupleTypeMetadata(pointer) {
+    this._ptr = pointer;
+
+    if (this.kind != MetadataKind.Tuple)
+        throw Error("type is not a value type");
+}
+TargetTupleTypeMetadata.prototype = Object.create(TargetMetadata.prototype, {
+    // offset pointerSize
+    numElements: {
+        get() {
+            return uint64(Memory.readPointer(this._ptr.add(Process.pointerSize)).toString());
+        },
+        enumerable: true,
+    },
+    // offset 2*pointerSize
+    labels: {
+        get() {
+            return Memory.readPointer(this._ptr.add(2*Process.pointerSize));
+        },
+        enumerable: true,
+    },
+    // offset 3*pointerSize
+    elements: {
+        get() {
+            let elems = [];
+            const sizeOfTupleElement = 2 * Process.pointerSize;
+            for (let i = 0; i < this.numElements; i++) {
+                elems.push(new TupleElement(this._ptr.add(3*Process.pointerSize + (i * sizeOfTupleElement))));
+            }
+            return elems;
+        },
+        enumerable: true,
+    },
+});
+function TupleElement(pointer) {
+    this._ptr = pointer;
+}
+TupleElement.prototype = {
+    // offset 0
+    get type() {
+        return new TargetMetadata(Memory.readPointer(this._ptr));
+    },
+    // offset pointerSize
+    get offset() {
+        return Memory.readPointer(this._ptr.add(Process.pointerSize)).toInt32();
     },
 };
 

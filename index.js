@@ -121,6 +121,8 @@ Type.prototype = {
         return this.nominalType.genericParams.hasGenericRequirements();
     },
     withGenericParams(...params) {
+        if (!this.nominalType)
+            throw Error("not a generic type");
         if (params.length != this.nominalType.genericParams.numGenericRequirements)
             throw Error("wrong number of generic parameters");
 
@@ -130,6 +132,57 @@ Type.prototype = {
         }
         let canonical = this.nominalType.accessFunction.apply(null, params.map(t => t.canonicalType));
         return new Type(this.nominalType, new types.TargetMetadata(canonical));
+    },
+    enumCases() {
+        if (!this.nominalType || !this.canonicalType)
+            throw Error("information not available");
+        if (this.canonicalType.kind != types.MetadataKind.Enum)
+            throw Error("not an enum type");
+        let info = this.nominalType.enum_;
+        let count = info.getNumCases();
+        let payloadCount = info.getNumPayloadCases();
+        let cases = [];
+        let names = info.caseNames;
+        let caseTypeAccessor = new NativeFunction(info.getCaseTypes, 'pointer', ['pointer']);
+        let caseTypes = caseTypeAccessor(this.canonicalType._ptr);
+        for (let i = 0; i < count; i++) {
+            let type = null;
+            let typeFlags = 0;
+            if (i < payloadCount) {
+                type = Memory.readPointer(caseTypes.add(i * Process.pointerSize));
+                typeFlags = type.and(types.FieldTypeFlags.typeMask);
+                type = new types.TargetMetadata(type.and(~types.FieldTypeFlags.typeMask));
+            }
+            cases.push({
+                name: Memory.readUtf8String(names),
+                type: type === null ? null : new Type(null, type),
+                indirect: (typeFlags & types.FieldTypeFlags.Indirect) === types.FieldTypeFlags.Indirect,
+                weak: (typeFlags & types.FieldTypeFlags.Weak) === types.FieldTypeFlags.Weak,
+            });
+            names = names.add(strlen(names) + 1);
+        }
+        return cases;
+    },
+    tupleElements() {
+        if (!this.canonicalType)
+            throw Error("information not available");
+        if (this.canonicalType.kind != types.MetadataKind.Tuple)
+            throw Error("not a tuple type");
+        let labels = this.canonicalType.labels;
+        if (labels.isNull())
+            labels = null;
+        else
+            labels = Memory.readUtf8String(labels).split(" ");
+        let infos = [];
+        let elements = this.canonicalType.elements;
+        for (let i = 0; i < this.canonicalType.numElements; i++) {
+            infos.push({
+                label: labels && labels[i] ? labels[i] : null,
+                type: new Type(null, elements[i].type),
+                offset: elements[i].offset,
+            });
+        }
+        return infos;
     },
     fields() {
         if (this.nominalType === null)
@@ -150,7 +203,7 @@ Type.prototype = {
                 return fields;
         }
         if (!info.hasFieldOffsetVector())
-            return fields;
+            throw Error("fields without offset vector not implemented");
 
 
         let fieldTypeAccessor = new NativeFunction(info.getFieldTypes, 'pointer', ['pointer']);
@@ -178,7 +231,7 @@ Type.prototype = {
     toString() {
         let canon = this.canonicalType ? this.canonicalType.toString() : "null";
         let nomin = this.nominalType ? this.nominalType.toString() : "null";
-        return "Type {\n\
+        return "Swift.Type {\n\
     canonicalType: " + canon + "\n\
     nominalType: " + nomin + "\n\
 }";
