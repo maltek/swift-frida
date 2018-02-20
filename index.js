@@ -227,6 +227,32 @@ Type.prototype = {
         }
         return fields;
     },
+    returnType() {
+        if (!this.canonicalType)
+            throw Error("information not available");
+        if (this.canonicalType.kind != types.MetadataKind.Function)
+            throw Error("not a function type");
+        return new Type(null, this.canonicalType.resultType);
+    },
+    functionFlags() {
+        if (!this.canonicalType)
+            throw Error("information not available");
+        if (this.canonicalType.kind != types.MetadataKind.Function)
+            throw Error("not a function type");
+        return this.canonicalType.flags;
+    },
+    getArguments() {
+        if (!this.canonicalType)
+            throw Error("information not available");
+        if (this.canonicalType.kind != types.MetadataKind.Function)
+            throw Error("not a function type");
+        return this.canonicalType.getArguments().map(arg => {
+            return {
+                inout: arg.inout,
+                type: new Type(null, arg.type),
+            };
+        });
+    },
 
     toString() {
         let canon = this.canonicalType ? this.canonicalType.toString() : "null";

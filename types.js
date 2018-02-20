@@ -244,6 +244,17 @@ const TypeMetadataRecordKind = {
     UniqueDirectClass: 0xF,
 };
 
+function FlaggedPointer(type, bitPos) {
+    const flagMask = 1 << bitPos;
+    const pointerBitMask = ~flagMask;
+    return function(val) {
+        return {
+            pointer: new type(val.and(pointerBitMask)),
+            flag: !val.and(flagMask).isNull(),
+        };
+    }
+}
+let Argument = FlaggedPointer(TargetMetadata, 0);
 
 function RelativeDirectPointerIntPair(ptr) {
     let val = Memory.readS32(ptr);
@@ -291,6 +302,8 @@ function TargetMetadata(pointer) {
             return new TargetValueMetadata(pointer);
         case MetadataKind.Tuple:
             return new TargetTupleTypeMetadata(pointer);
+        case MetadataKind.Function:
+            return new TargetFunctionTypeMetadata(pointer);
     }
 }
 TargetMetadata.prototype = {
@@ -555,7 +568,7 @@ function TargetTupleTypeMetadata(pointer) {
     this._ptr = pointer;
 
     if (this.kind != MetadataKind.Tuple)
-        throw Error("type is not a value type");
+        throw Error("type is not a tuple type");
 }
 TargetTupleTypeMetadata.prototype = Object.create(TargetMetadata.prototype, {
     // offset pointerSize
@@ -597,6 +610,62 @@ TupleElement.prototype = {
     get offset() {
         return Memory.readPointer(this._ptr.add(Process.pointerSize)).toInt32();
     },
+};
+function TargetFunctionTypeMetadata(pointer) {
+    this._ptr = pointer;
+
+    if (this.kind != MetadataKind.Function)
+        throw Error("type is not a function type");
+}
+TargetFunctionTypeMetadata.prototype = Object.create(TargetMetadata.prototype, {
+    // offset pointerSize
+    flags: {
+        get() {
+            let val = Memory.readPointer(this._ptr.add(Process.pointerSize));
+            return {
+                numArguments: val.and(TargetFunctionTypeFlags.NumArgumentsMask).toInt32(),
+                convention: val.and(TargetFunctionTypeFlags.ConventionMask).shr(TargetFunctionTypeFlags.ConventionShift).toInt32(),
+                doesThrow: !val.and(TargetFunctionTypeFlags.ThrowsMask).isNull(),
+            };
+        },
+        enumerable: true,
+    },
+    // offset 2*pointerSize
+    resultType: {
+        get() {
+            return new TargetMetadata(Memory.readPointer(this._ptr.add(2*Process.pointerSize)));
+        },
+        enumerable: true,
+    },
+    // offset 3*pointerSize
+    getArguments: {
+        value: function() {
+            let count = this.flags.numArguments;
+            let args = [];
+            let ptr = this._ptr.add(3 * Process.pointerSize);
+            for (let i = 0; i < count; i++) {
+                let arg = new Argument(Memory.readPointer(ptr.add(i * Process.pointerSize)));
+                args.push({
+                    inout: arg.flag,
+                    type: arg.pointer,
+                });
+            }
+            return args;
+        },
+        enumerable: true,
+    },
+});
+const TargetFunctionTypeFlags = {
+    NumArgumentsMask: 0x00FFFFFF,
+    ConventionMask: 0x0F000000,
+    ConventionShift: 24,
+    ThrowsMask: 0x10000000,
+};
+const FunctionMetadataConvention = {
+    Swift: 0,
+    Block: 1,
+    Thin: 2,
+    CFunctionPointer: 3,
 };
 
 function RelativeIndirectablePointer(addr) {
