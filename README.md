@@ -16,7 +16,17 @@ Right now, the following functions are available in the `Swift` namespace, when 
  * `available` allows you to check if the current process uses Swift. Don't use any of the other functions here if this property is `false`.
  * `isSwiftFunction(name)` Takes a function/symbol name (like you can get from `Module` objects), and returns a boolean indicating whether it is a mangled Swift name or not.
  * `demangle(name)` Takes a mangled Swift name (like you can get from `Module` objects), and returns a demangled, human-readable String for it.
- * `enumerateTypesSync()` Returns an array with the names of all Swift data types defined in the Swift program.
+ * `enumerateTypesSync()` Returns an array with the information about all Swift data types defined in the Swift program. The returned objects have a `toString` method returning the fully qualified name of the type, including generic bounds (if possible) and a string property `kind` that tells you which kind of type (e.g. `"Class"`, `"Struct"`) it is. Depending on the kind of type, additional methods are available:
+   Kind             | available method
+   -----------------|---------------------------------------------------------------------------------------------------------------
+   Enum             | `enumCases` returns an array with all defined cases, with their names, types, and attributes.
+   String, Struct   | `fields` returns an array with all fields of this class or struct, with names, offsets, types, and attributes.
+   Tuple            | `tupleElements` returns an array with the types and labels of the elements in the tuple.
+   Function         | `returnType` returns the return type of the function.
+   Function         | `functionFlags` returns an object telling you the calling convention and whether the function throws or not.
+   Function         | `getArguments` returns an array with the type and flags (`inout`) for every function argument.
+   ObjCClassWrapper | `getObjCObject` returns an `ObjC.Object` describing this class.
+   Uninstantiated generic types (you can check this with the `isGeneric` method), do not have any of these methods available. You must call `withGenericParams` to get a fully concrete type.
 
 But, again, this is completely unstable and might change at any time. There's also some other stuff there, but those are just API sketches of what might maybe come in future.
 

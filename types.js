@@ -7,6 +7,14 @@ const mangling = require('./mangling');
 // for all these definitions, look at include/swift/Runtime/Metadata.h and friends in the Swift sources
 // based on commit 2035c311736d15c9ef1a7e2e42a925a6ddae098c
 
+function flagsToObject(definition, value) {
+    let res = {};
+    for (let [flagName, flagVal] of Object.entries(definition)) {
+        res[flagName] = (value & flagVal) === flagVal;
+    }
+    return res;
+}
+
 const ValueWitnessFlags = {
     AlignmentMask: 0x0000FFFF,
     IsNonPOD: 0x00010000,
@@ -27,7 +35,7 @@ TypeLayout.prototype = {
     },
     // offset pointerSize
     get flags() {
-        return Memory.readPointer(this._ptr.add(Process.pointerSize));
+        return flagsToObject(ValueWitnessFlags, Memory.readPointer(this._ptr.add(Process.pointerSize)).toInt32());
     },
     // offset 2* pointerSize
     get stride() {
@@ -35,8 +43,8 @@ TypeLayout.prototype = {
     },
     // offset 3* pointerSize
     get extraInhabitantFlags() {
-        if (this.flags.and(ValueWitnessFlags.HasExtraInhabitants).isNull())
-            throw Error("extra inhabitant flags not available");
+        if (!this.flags.HasExtraInhabitants)
+            throw Error("extra inhabitant flag not available");
         return Memory.readPointer(this._ptr.add(3 * Process.pointerSize));
     },
 };
@@ -52,7 +60,7 @@ ValueWitnessTable.prototype = Object.create(TypeLayout.prototype, {
             else if (size !== undefined)
                 throw Error("no overload with 1 argument");
             else
-                return !(this.flags & ValueWitnessFlags.IsNonInline);
+                return !this.flags.IsNonInline;
         },
         enumerable: true,
     },
@@ -163,10 +171,10 @@ TargetProtocolConformanceRecord.prototype = {
             case TypeMetadataRecordKind.UniqueDirectType:
             case TypeMetadataRecordKind.NonuniqueDirectType:
                 throw Error("not generic metadata pattern");
-		}
+        }
 
         return this.typeDescriptor;
-	},
+    },
 
     /// Get the directly-referenced static witness table.
     getStaticWitnessTable() {
@@ -266,88 +274,70 @@ function RelativeDirectPointerIntPair(ptr) {
     };
 }
 const NominalTypeKind = {
-    Class: 0,
-    Struct: 1,
-    Enum: 2,
-    Optional: 3,
+    "0": "Class",
+    "1": "Struct",
+    "2": "Enum",
+    "3": "Optional",
 };
 
 const MetadataKind = {
-    Class: 0,
-    Struct: 1,
-    Enum: 2,
-    Optional: 3,
+    "0": "Class",
+    "1": "Struct",
+    "2": "Enum",
+    "3": "Optional",
 
-    Opaque: 8,
-    Tuple: 9,
-    Function: 10,
-    Existential: 12,
-    Metatype: 13,
-    ObjCClassWrapper: 14,
-    ExistentialMetatype: 15,
-    ForeignClass: 16,
-    HeapLocalVariable: 64,
-    HeapGenericLocalVariable: 65,
-    ErrorObject: 128,
+    "8": "Opaque",
+    "9": "Tuple",
+    "10": "Function",
+    "12": "Existential",
+    "13": "Metatype",
+    "14": "ObjCClassWrapper",
+    "15": "ExistentialMetatype",
+    "16": "ForeignClass",
+    "64": "HeapLocalVariable",
+    "65": "HeapGenericLocalVariable",
+    "128": "ErrorObject",
 };
 
 function TargetMetadata(pointer) {
     this._ptr = pointer;
     switch (this.kind) {
-        case MetadataKind.Class:
+        case "Class":
             return new TargetClassMetadata(pointer);
-        case MetadataKind.Struct:
-        case MetadataKind.Enum:
-        case MetadataKind.Optional:
+        case "Struct":
+        case "Enum":
+        case "Optional":
             return new TargetValueMetadata(pointer);
-        case MetadataKind.Tuple:
+        case "Tuple":
             return new TargetTupleTypeMetadata(pointer);
-        case MetadataKind.Function:
+        case "Function":
             return new TargetFunctionTypeMetadata(pointer);
+        case "ForeignClass":
+            return new TargetForeignTypeMetadata(pointer);
+        case "ObjCClassWrapper":
+            return new TargetObjCClassWrapperMetadata(pointer);
     }
 }
 TargetMetadata.prototype = {
     get kind() {
         let val = Memory.readPointer(this._ptr);
         if (val.compare(ptr(4096)) > 0) {
-            return MetadataKind.Class;
+            return "Class";
         }
-        return val.toInt32();
+        return MetadataKind[val.toInt32().toString()];
     },
 
     getNominalTypeDescriptor() {
-        let val;
-        switch (this.kind) {
-            case MetadataKind.Class: {
-                let cls = new TargetClassMetadata(this._ptr);
-                if (!cls.isTypeMetadata()) {
-                    return null;
-                }
-                if (cls.isArtificialSubclass()) {
-                    return null;
-                }
-                val = cls.getDescription();
-                break;
-            }
-            case MetadataKind.Struct:
-            case MetadataKind.Enum:
-            case MetadataKind.Optional:
-                val = new TargetValueMetadata(this._ptr).description;
-                break;
-            default:
-                return null;
-        }
-        return new TargetNominalTypeDescriptor(val);
+        return null;
     },
 
     toString() {
-        let kind = Object.getOwnPropertyNames(MetadataKind).filter(k => MetadataKind[k] == this.kind)[0];
-        return "[TargetMetadata: " + kind + "@" + this._ptr + "]";
+        return "[TargetMetadata: " + this.kind + "@" + this._ptr + "]";
     },
 };
 function TargetClassMetadata(pointer) {
     this._ptr = pointer;
-    if (this.kind !== MetadataKind.Class)
+    if (this.kind !== "Class")
         throw Error("type is not a class type");
 }
 if ("_debug" in global)
@@ -382,7 +372,10 @@ TargetClassMetadata.prototype = Object.create(TargetMetadata.prototype, {
     // offset pointerSize
     superClass: {
         get() {
-            return new TargetClassMetadata(Memory.readPointer(this._ptr.add(Process.pointerSize)));
+            if (this.isPureObjC())
+                return null;
+            let val = Memory.readPointer(this._ptr.add(Process.pointerSize));
+            return val.isNull() ? null : new TargetClassMetadata(val);
         },
         enumerable: true,
     },
@@ -406,7 +399,7 @@ TargetClassMetadata.prototype = Object.create(TargetMetadata.prototype, {
     // offset 5 * pointerSize
     flags: {
         get() {
-            return Memory.readU32(this._ptr.add(5 * Process.pointerSize));
+            return flagsToObject(GenericParameterDescriptorFlags, Memory.readU32(this._ptr.add(5 * Process.pointerSize)));
         },
         enumerable: true,
     },
@@ -460,6 +453,11 @@ TargetClassMetadata.prototype = Object.create(TargetMetadata.prototype, {
         },
         enumerable: true,
     },
+    // offset 7 * pointerSize + 24: superClass members (then superClass's superClass members...)
+    //                          ... metadata reference for parent
+    //                          ... generic parameters for this class
+    //                          ... class variables
+    //                          ... "tabulated" virtual methods
 
     isTypeMetadata: {
         value: function() {
@@ -492,11 +490,21 @@ TargetClassMetadata.prototype = Object.create(TargetMetadata.prototype, {
         enumerable: true,
     },
     getNominalTypeDescriptor: {
-        value: function() {
+        value() {
             if (this.isTypeMetadata() && !this.isArtificialSubclass())
                 return new TargetNominalTypeDescriptor(this.getDescription());
             else
-                return TargetMetadata.prototype.getNominalTypeDescriptor.call(this);
+                return null;
+        },
+        enumerable: true,
+    },
+    getParentType: {
+        value(nominalType) {
+            let genericParams = nominalType.genericParams;
+            if (!genericParams.flags.HasParent)
+                return null;
+
+            return new TargetMetadata(this._ptr.add((genericParams.offset - 1) * Process.pointerSize));
         },
         enumerable: true,
     },
@@ -505,9 +513,9 @@ function TargetValueMetadata(pointer) {
     this._ptr = pointer;
 
     switch (this.kind) {
-        case MetadataKind.Struct:
-        case MetadataKind.Enum:
-        case MetadataKind.Optional:
+        case "Struct":
+        case "Enum":
+        case "Optional":
             break;
         default:
             throw Error("type is not a value type");
@@ -521,6 +529,31 @@ TargetValueMetadata.prototype = Object.create(TargetMetadata.prototype, {
             if (val.isNull())
                 return null;
             return val;
+        },
+        enumerable: true,
+    },
+
+    getGenericArgs: {
+        value() {
+            let params = new TargetNominalTypeDescriptor(this.description).genericParams;
+            let args = [];
+            if (params.hasGenericRequirements()) {
+                // the shift acts on signed 32bit numbers, like we need here
+                let offset = params.offset << Math.log2(Process.pointerSize);
+                for (let i = 0; i < params.numGenericRequirements; i++) {
+                    args.push(new TargetMetadata(Memory.readPointer(this._ptr.add(offset))));
+                    offset += Process.pointerSize;
+                }
+            }
+            return args;
+        },
+        enumerable: true,
+    },
+    getNominalTypeDescriptor: {
+        value() {
+            if (this.description.isNull())
+                return null;
+            return new TargetNominalTypeDescriptor(this.description);
         },
         enumerable: true,
     },
@@ -560,14 +593,19 @@ TargetGenericMetadata.prototype = {
         return this._ptr.add(8 + 17 * Process.pointerSize);
     },
 
+    _getMetadata() {
+        return new TargetMetadata(this.getMetadataTemplate().add(this.addressPoint));
+    },
+
     getTemplateDescription() {
-        return MetadataKind.readFromMemory(this.getMetadataTemplate().add(this.addressPoint));
+        let metadata = new TargetMetadata(this.getMetadataTemplate().add(this.addressPoint));
+        return metadata.getNominalTypeDescriptor();
     },
 };
 function TargetTupleTypeMetadata(pointer) {
     this._ptr = pointer;
 
-    if (this.kind != MetadataKind.Tuple)
+    if (this.kind != "Tuple")
         throw Error("type is not a tuple type");
 }
 TargetTupleTypeMetadata.prototype = Object.create(TargetMetadata.prototype, {
@@ -614,7 +652,7 @@ TupleElement.prototype = {
 function TargetFunctionTypeMetadata(pointer) {
     this._ptr = pointer;
 
-    if (this.kind != MetadataKind.Function)
+    if (this.kind != "Function")
         throw Error("type is not a function type");
 }
 TargetFunctionTypeMetadata.prototype = Object.create(TargetMetadata.prototype, {
@@ -655,6 +693,60 @@ TargetFunctionTypeMetadata.prototype = Object.create(TargetMetadata.prototype, {
         enumerable: true,
     },
 });
+const ForeginTypeMetadataFlags = {
+    HasInitializationFunction: 1,
+};
+function TargetForeignTypeMetadata(pointer) {
+    this._ptr = pointer;
+
+    if (this.kind != "ForeignClass")
+        throw Error("type is not a foreign class type");
+}
+TargetForeignTypeMetadata.prototype = Object.create(TargetMetadata.prototype, {
+    // offset -2 * pointerSize
+    flags: {
+        get() {
+            return flagsToObject(ForeginTypeMetadataFlags, Memory.readPointer(this._ptr.sub(2*Process.pointerSize)));
+        },
+        enumerable: true,
+    },
+    // offset -3 * pointerSize
+    unique: {
+        get() {
+            return Memory.readPointer(this._ptr.sub(3*Process.pointerSize));
+        },
+        enumerable: true,
+    },
+    // offset -4*pointerSize
+    name: {
+        get() {
+            return Memory.readUtf8String(Memory.readPointer(this._ptr.sub(4*Process.pointerSize)));
+        },
+        enumerable: true,
+    },
+    // offset -5*pointerSize
+    initializationFunction: {
+        get() {
+            return new NativeFunction(Memory.readPointer(this._ptr.sub(5 * Process.pointerSize)), 'void', ['pointer']);
+        },
+        enumerable: true,
+    },
+});
+function TargetObjCClassWrapperMetadata(pointer) {
+    this._ptr = pointer;
+
+    if (this.kind !== "ObjCClassWrapper")
+        throw Error("type is not a ObjC class wrapper type");
+}
+TargetObjCClassWrapperMetadata.prototype = Object.create(TargetMetadata.prototype, {
+    // offset pointerSize
+    class_: {
+        get() {
+            return Memory.readPointer(this._ptr.add(Process.pointerSize));
+        },
+        enumerable: true,
+    },
+});
 const TargetFunctionTypeFlags = {
     NumArgumentsMask: 0x00FFFFFF,
     ConventionMask: 0x0F000000,
@@ -687,6 +779,10 @@ function TargetRelativeDirectPointerRuntime(ptr) {
     let offset = Memory.readS32(ptr);
     return ptr.add(offset);
 }
+const GenericParameterDescriptorFlags = {
+    HasParent: 1,
+    HasGenericParent: 2,
+};
 function TargetNominalTypeDescriptor(ptr) {
     this._ptr = ptr;
 }
@@ -694,7 +790,7 @@ TargetNominalTypeDescriptor.prototype = {
     // offset 0
     get mangledName() {
         let addr = TargetRelativeDirectPointerRuntime(this._ptr);
-        return mangling.MANGLING_PREFIX + Memory.readCString(addr);
+        return mangling.MANGLING_PREFIX + Memory.readUtf8String(addr);
     },
     // offset 4
     get clas() {
@@ -768,43 +864,36 @@ TargetNominalTypeDescriptor.prototype = {
     },
 
 
-    // offset 16
+    // offset 20
     get genericMetadataPatternAndKind() {
-        return RelativeDirectPointerIntPair(this._ptr.add(16));
+        return RelativeDirectPointerIntPair(this._ptr.add(20));
     },
 
-    // offset 20
+    // offset 24
     get accessFunction() {
-        let args = [];
-        // the type of this function depends on the generic requirements of this type
-        for (let i = 0; i < this.genericParams.numGenericRequirements; i++) {
-            args.push('pointer');
-        }
-        return new NativeFunction(TargetRelativeDirectPointerRuntime(this._ptr.add(21)), 'pointer', args);
+        return TargetRelativeDirectPointerRuntime(this._ptr.add(24));
     },
 
     getGenericMetadataPattern() {
-        return this.genericMetadataPatternAndKind.pointer;
+        return new TargetGenericMetadata(this.genericMetadataPatternAndKind.pointer);
     },
 
     getKind() {
-        return this.genericMetadataPatternAndKind.intVal;
+        return NominalTypeKind[this.genericMetadataPatternAndKind.intVal];
     },
 
     offsetToNameOffset() {
         return 0;
     },
 
-    // offset 24
+    // offset 28
     get genericParams() {
-        let ptr = this._ptr.add(24);
-        const GenericParameterDescriptorFlags = {
-            HasParent: 1,
-            HasGenericParent: 2,
-        };
+        let ptr = this._ptr.add(28);
         return {
             // offset 0
             get offset() {
+                if (!this.isGeneric())
+                    throw Error("not generic!");
                 return Memory.readU32(ptr.add(0));
             },
             // offset 4
@@ -817,7 +906,7 @@ TargetNominalTypeDescriptor.prototype = {
             },
             // offset 12
             get flags() {
-                return Memory.readU32(ptr.add(12));
+                return flagsToObject(GenericParameterDescriptorFlags, Memory.readU32(ptr.add(12)));
             },
 
             hasGenericRequirements() {
@@ -825,7 +914,7 @@ TargetNominalTypeDescriptor.prototype = {
             },
 
             isGeneric() {
-                return this.hasGenericRequirements() || (this.flags & GenericParameterDescriptorFlags.HasGenericParent) !== 0;
+                return this.hasGenericRequirements() || this.flags.HasGenericParent;
             },
         };
     },
@@ -925,9 +1014,10 @@ module.exports = {
     TargetClassMetadata: TargetClassMetadata,
     TargetProtocolConformanceRecord: TargetProtocolConformanceRecord,
     TargetTypeMetadataRecord: TargetTypeMetadataRecord,
-    MetadataKind: MetadataKind,
-    NominalTypeKind: NominalTypeKind,
     TargetNominalTypeDescriptor: TargetNominalTypeDescriptor,
+    TargetFunctionTypeFlags: TargetFunctionTypeFlags,
+    NominalTypeKind: NominalTypeKind,
     TypeMetadataRecordKind: TypeMetadataRecordKind,
     FieldTypeFlags: FieldTypeFlags,
+    FunctionMetadataConvention: FunctionMetadataConvention,
 };
