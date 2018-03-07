@@ -14,7 +14,7 @@ I'm mainly testing things on iOS 11.1.2 (64bit), every now and then also on iOS 
 Right now, the following functions are available in the `Swift` namespace, when the script is loaded, and should be mostly working:
 
  * `available` allows you to check if the current process uses Swift. Don't use any of the other functions here if this property is `false`.
- * `isSwiftFunction(name)` Takes a function/symbol name (like you can get from `Module` objects), and returns a boolean indicating whether it is a mangled Swift name or not.
+ * `isSwiftName(name)` Takes a function/symbol name (like you can get from `Module` objects), and returns a boolean indicating whether it is a mangled Swift name or not.
  * `demangle(name)` Takes a mangled Swift name (like you can get from `Module` objects), and returns a demangled, human-readable String for it.
  * `enumerateTypesSync()` Returns an array with the information about all Swift data types defined in the Swift program. The returned objects have a `toString` method returning the fully qualified name of the type, including generic bounds (if possible) and a string property `kind` that tells you which kind of type (e.g. `"Class"`, `"Struct"`) it is. Depending on the kind of type, additional methods are available:
  

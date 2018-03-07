@@ -4,6 +4,7 @@
 
 const types = require('./types');
 const mangling = require('./mangling');
+let Swift;
 
 let size_t = Process.pointerSize === 8 ? 'uint64' : Process.pointerSize === 4 ? 'uint32' : "unsupported platform";
 
@@ -52,7 +53,14 @@ const OpaqueExistentialContainer = [
                                         // WitnessTable *witnessTables[NUM_WITNESS_TABLES]; (depending on the number of protocols required for the type -- for the Any type, no witness tables should be there)
                                    ]
 
-function Type(nominalType, canonicalType) {
+function Type(nominalType, canonicalType, name, accessFunction) {
+    if (accessFunction) {
+        if (nominalType || canonicalType || !name)
+            throw Error("type access function must only be provided if the type is not known");
+        this.name = name;
+        this.accessFunction = accessFunction;
+    }
+
     this.nominalType = nominalType;
     if (!nominalType && canonicalType) {
         this.nominalType = canonicalType.getNominalTypeDescriptor();
@@ -65,23 +73,25 @@ function Type(nominalType, canonicalType) {
         }
     }
     this.canonicalType = canonicalType;
-    this.kind = canonicalType ? canonicalType.kind : null;
+    this.kind = canonicalType ? canonicalType.kind : accessFunction ? "Unknown" : null;
 
-    if (this.nominalType && !canonicalType) {
+    if ((this.nominalType && !canonicalType))
+        accessFunction = this.nominalType.accessFunction;
+    if (accessFunction) {
         this.withGenericParams = function withGenericParams(...params) {
             // when there is a generic parent, we don't know the number of generic parameters
-            if (!this.nominalType.genericParams.flags.HasGenericParent &&
+            if (this.nominalType && !this.nominalType.genericParams.flags.HasGenericParent &&
                     params.length != this.nominalType.genericParams.numGenericRequirements) {
                 throw Error("wrong number of generic parameters");
             }
 
             let args = [];
             for (let param of params) {
-                if (param.hasGenericRequirements() || !param.canonicalType)
+                if (param.isGeneric() || !param.canonicalType)
                     throw Error("generic type parameter needs all own type parameters filled!");
                 args.push('pointer');
             }
-            let accessFunc = new NativeFunction(this.nominalType.accessFunction, 'pointer', args);
+            let accessFunc = new NativeFunction(accessFunction, 'pointer', args);
             let canonical = accessFunc.apply(null, params.map(t => t.canonicalType._ptr));
             return new Type(this.nominalType, new types.TargetMetadata(canonical));
         };
@@ -124,7 +134,7 @@ function Type(nominalType, canonicalType) {
                 }
                 for (let i = hierarchy.length; i--;) {
                     let canon = hierarchy[i];
-                    let nomin = (canon.kind === "Class") ? canon.getNominalTypeDescriptor() : canon.description;
+                    let nomin = (["Class", "Struct"].indexOf(canon.kind) != -1) ? canon.getNominalTypeDescriptor() : null;
                     if (!nomin)
                         continue;
                     let info = (nomin.getKind() === "Class") ? nomin.clas : nomin.struct;
@@ -144,7 +154,7 @@ function Type(nominalType, canonicalType) {
                         results.push({
                             name: Memory.readUtf8String(fieldName),
                             offset: Memory.readPointer(fieldOffsets.add(j * Process.pointerSize)),
-                            type: new Type(null, type),
+                            type: new Type(null, type, "?Unknown type of " +  this.name),
                             indirect: (typeFlags & types.FieldTypeFlags.Indirect) === types.FieldTypeFlags.Indirect,
                             weak: (typeFlags & types.FieldTypeFlags.Weak) === types.FieldTypeFlags.Weak,
                         });
@@ -190,12 +200,17 @@ function Type(nominalType, canonicalType) {
             });
         };
     }
+    if (this.kind == "Opaque") {
+        if (!name)
+            throw Error("a name is required when creating Opaque types");
+        this.name = name;
+    }
 
     if (canonicalType) {
         this.getGenericParams = function getGenericParams() {
-            if (!canonicalType.getGenericParams)
+            if (!canonicalType.getGenericArgs)
                 throw Error("generic arguments for this kind of type not implemented");
-            return canonicalType.getGenericParams().map(t => new Type(null, t));
+            return canonicalType.getGenericArgs().map(t => t === null ? null : new Type(null, t));
         };
     }
     if (this.kind === "ObjCClassWrapper") {
@@ -210,6 +225,9 @@ function Type(nominalType, canonicalType) {
 }
 Type.prototype = {
     isGeneric() {
+        if (this.accessFunction)
+            return true;
+
         if (!this.nominalType || this.canonicalType)
             return false;
         return this.nominalType.genericParams.isGeneric();
@@ -236,8 +254,7 @@ Type.prototype = {
             return name;
         }
 
-        let kind = this.canonicalType ? this.canonicalType.kind : null;
-        switch (kind) {
+        switch (this.kind) {
             case "Class":
             case "Struct":
             case "Enum":
@@ -255,8 +272,21 @@ Type.prototype = {
                 return Swift.demangle(mangling.MANGLING_PREFIX + this.canonicalType.name);
             case "ObjCClassWrapper":
                 return Memory.readUtf8String(ObjC.api.class_getName(this.canonicalType.class_));
+            case "Existential": {
+                let str = "Existential" + this.canonicalType.getRepresentation() + "@" + this.canonicalType._ptr.toString();
+                if (this.canonicalType.getSuperclassConstraint())
+                    str += " inheriting from " + new Type(null, this.canonicalType.getSuperclassConstraint()).toString();
+                let protocols = this.canonicalType.protocols;
+                if (protocols.numProtocols)
+                    str += " implementing " + protocols.protocols.map(p => p.name).join(", ");
+                return str;
+            }
+            case "Opaque":
+            case "Unknown":
+                if (this.name)
+                    return this.name;
             default:
-                throw Error("not yet implemented: " + kind);
+                throw Error("not yet implemented: " + this.kind);
         }
     },
 };
@@ -264,52 +294,84 @@ Type.prototype = {
 
 function findAllTypes(api) {
     let sizeAlloc = Memory.alloc(8);
-    let found = [];
     const __TEXT = Memory.allocUtf8String("__TEXT");
-    const __swift2_types = Memory.allocUtf8String("__swift2_types");
-    const __swift2_proto = Memory.allocUtf8String("__swift2_proto");
 
-    const recordSizes = {
-        'types': 8,
-        'protocol conformance': 16,
-    };
+    const sectionNames = [Memory.allocUtf8String("__swift2_types"), Memory.allocUtf8String("__swift2_proto")];
+    const recordSizes = [8, 16];
 
+    let typesByName = new Map();
     for (let mod of Process.enumerateModulesSync()) {
-        for (let [section, what] of [[__swift2_types, "types"], [__swift2_proto, "protocol conformance"]]) {
+        for (let section = 0; section < sectionNames.length; section++) {
             // we don't have to use the name _mh_execute_header to refer to the mach-o header -- it's the module header
-            let pointer = api.getsectiondata(mod.base, __TEXT, section, sizeAlloc);
+            let pointer = api.getsectiondata(mod.base, __TEXT, sectionNames[section], sizeAlloc);
             if (pointer.isNull())
                 continue;
 
             let sectionSize = Memory.readULong(sizeAlloc);
-            for (let i = 0; i < sectionSize; i += recordSizes[what]) {
-                let nominalType = null;
+            for (let i = 0; i < sectionSize; i += recordSizes[section]) {
                 let record;
-                if (what === "types") {
+                if (section === 0) {
                     record = new types.TargetTypeMetadataRecord(pointer.add(i));
-
-                    if (record.getTypeKind() === types.TypeMetadataRecordKind.UniqueNominalTypeDescriptor)
-                        nominalType = record.getNominalTypeDescriptor();
                 } else {
                     record = new types.TargetProtocolConformanceRecord(pointer.add(i));
                 }
+                let nominalType = null;
+                if (record.getTypeKind() === types.TypeMetadataRecordKind.UniqueNominalTypeDescriptor)
+                    nominalType = record.getNominalTypeDescriptor();
+
                 let canonicalType = record.getCanonicalTypeMetadata(api);
 
-                if (nominalType || canonicalType)
-                    found.push(new Type(nominalType, canonicalType));
+                if (nominalType || canonicalType) {
+                    let t = new Type(nominalType, canonicalType);
+                    typesByName.set(t.toString(), t);
+                } else {
+                    console.log("metadata record without nominal or canonical type?! @" + pointer.add(i));
+                }
             }
         }
+
+        // TODO: it kind of sucks that we rely on symbol information here.
+        // we should see if there is some other way to find the nominal types for generic data types
+        const METADATA_PREFIX = "type metadata for ";
+        const METADATA_ACCESSOR_PREFIX = "type metadata accessor for ";
+        for (let exp of Module.enumerateExportsSync(mod.name)) {
+            if (Swift.isSwiftName(exp.name)) {
+                let demangled = Swift.demangle(exp.name);
+                if (demangled.startsWith(METADATA_PREFIX)) {
+                    let name = demangled.substr(METADATA_PREFIX.length);
+                    if (!typesByName.get(name)) {
+                        // type metadata sometimes can have members at negative indices, so we need to
+                        // iterate until we find something that looks like the beginning of a Metadata object
+                        // (Sadly, that doesn't work for class metadata with ISA pointers, but it should be no
+                        // problem to find ObjC metadata for such classes.)
+                        for (let i = 0; i < 2; i++) {
+                            let ptr = exp.address.add(Process.pointerSize * i);
+                            if (Memory.readPointer(ptr).toString(10) in types.MetadataKind) {
+                                typesByName.set(name, new Type(null, new types.TargetMetadata(ptr), name));
+                                break;
+                            }
+                        }
+                    }
+                } else if (demangled.startsWith(METADATA_ACCESSOR_PREFIX)) {
+                    let name = demangled.substr(METADATA_ACCESSOR_PREFIX.length);
+                    if (!typesByName.get(name)) {
+                        typesByName.set(name, new Type(null, null, name, exp.address));
+                    }
+                }
+            }
+        }
+
     }
-    return found;
+    return typesByName;
 }
 
-let Swift = module.exports = {
+Swift = module.exports = {
 
     get available() {
         return Module.findBaseAddress("libswiftCore.dylib") !== null;
     },
 
-    isSwiftFunction(func) {
+    isSwiftName(func) {
         let name = func.name || func;
         return name.startsWith(mangling.MANGLING_PREFIX);
     },
@@ -338,7 +400,7 @@ let Swift = module.exports = {
     },
 
     demangle(name) {
-        if (!this.isSwiftFunction(name))
+        if (!Swift.isSwiftName(name))
             throw Error("function name '" + name + "' is not a mangled Swift function");
 
         let cStr = Memory.allocUtf8String(name);
@@ -354,10 +416,8 @@ let Swift = module.exports = {
 
     _typesByName: null,
     enumerateTypesSync() {
-        let typesByName = new Map();
-        for (let type of findAllTypes(this._api)) {
-            typesByName.set(type.toString(), type);
-        }
+        let typesByName = findAllTypes(this._api);
+
         this._typesByName = typesByName;
         return Array.from(typesByName.values());
     },
@@ -403,6 +463,12 @@ let Swift = module.exports = {
 
         let pointer = this._api.swift_getFunctionTypeMetadata(data);
         return new Type(null, new types.TargetMetadata(pointer));
+    },
+
+    // Create a new Type object, from a Metadata*.
+    // The name is only used for opaque types (builtins).
+    _typeFromCanonical(pointer, name) {
+        return new Type(null, new types.TargetMetadata(pointer), name);
     },
 
     get _api() {
@@ -453,7 +519,7 @@ let Swift = module.exports = {
             }
         ];
         let remaining = 0;
-        pending.forEach(function (api) {
+        pending.forEach(api => {
             const functions = api.functions || {};
             const variables = api.variables || {};
             const optionals = api.optionals || {};
@@ -462,7 +528,7 @@ let Swift = module.exports = {
 
             const exportByName = Module
             .enumerateExportsSync(api.module)
-            .reduce(function (result, exp) {
+            .reduce((result, exp) => {
                 result[exp.name] = exp;
                 return result;
             }, {});

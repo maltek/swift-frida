@@ -173,7 +173,7 @@ TargetProtocolConformanceRecord.prototype = {
                 throw Error("not generic metadata pattern");
         }
 
-        return this.typeDescriptor;
+        return new TargetNominalTypeDescriptor(this.typeDescriptor);
     },
 
     /// Get the directly-referenced static witness table.
@@ -316,6 +316,8 @@ function TargetMetadata(pointer) {
             return new TargetForeignTypeMetadata(pointer);
         case "ObjCClassWrapper":
             return new TargetObjCClassWrapperMetadata(pointer);
+        case "Existential":
+            return new TargetExistentialTypeMetadata(pointer);
     }
 }
 TargetMetadata.prototype = {
@@ -340,8 +342,6 @@ function TargetClassMetadata(pointer) {
     if (this.kind !== "Class")
         throw Error("type is not a class type");
 }
-if ("_debug" in global)
-    global.TargetClassMetadata = TargetClassMetadata;
 TargetClassMetadata.prototype = Object.create(TargetMetadata.prototype, {
     // offset -2 * pointerSize
     destructor: {
@@ -473,8 +473,6 @@ TargetClassMetadata.prototype = Object.create(TargetMetadata.prototype, {
     },
     isArtificialSubclass: {
         value: function() {
-            if(!this.isTypeMetadata())
-                throw Error("assertion error");
             return this.description.compare(int64(0)) === 0;
         },
         enumerable: true,
@@ -535,13 +533,17 @@ TargetValueMetadata.prototype = Object.create(TargetMetadata.prototype, {
 
     getGenericArgs: {
         value() {
-            let params = new TargetNominalTypeDescriptor(this.description).genericParams;
+            let params = this.getNominalTypeDescriptor().genericParams;
             let args = [];
             if (params.hasGenericRequirements()) {
                 // the shift acts on signed 32bit numbers, like we need here
                 let offset = params.offset << Math.log2(Process.pointerSize);
                 for (let i = 0; i < params.numGenericRequirements; i++) {
-                    args.push(new TargetMetadata(Memory.readPointer(this._ptr.add(offset))));
+                    let ptr = Memory.readPointer(this._ptr.add(offset));
+                    if (ptr.isNull())
+                        args.push(null)
+                    else
+                        args.push(new TargetMetadata(ptr));
                     offset += Process.pointerSize;
                 }
             }
@@ -747,6 +749,139 @@ TargetObjCClassWrapperMetadata.prototype = Object.create(TargetMetadata.prototyp
         enumerable: true,
     },
 });
+function ExistentialTypeFlags(val) {
+    this._val = val;
+}
+ExistentialTypeFlags.prototype = {
+    NumWitnessTablesMask: 0x00FFFFFF,
+    ClassConstraintMask: 0x80000000,
+    HasSuperclassMask: 0x40000000,
+    SpecialProtocolMask: 0x3F000000,
+    SpecialProtocolShift: 24,
+
+    getNumWitnessTables() {
+        return this._val & this.NumWitnessTablesMask;
+    },
+    getClassConstraint() {
+        return !!(this._val & this.ClassConstraintMask) ? "Any" : "Class";
+    },
+    hasSuperclassConstraint() {
+        return !!(this._val & this.HasSuperclassMask);
+    },
+    getSpecialProtocol() {
+        const SpecialProtocol = [ "None", "Error" ];
+        return SpecialProtocol[(this._val & this.SpecialProtocolMask) >> this.SpecialProtocolShift];
+    },
+};
+function TargetExistentialTypeMetadata(pointer) {
+    this._ptr = pointer;
+
+    if (this.kind != "Existential")
+        throw Error("type is not a existential type");
+}
+TargetExistentialTypeMetadata.prototype = Object.create(TargetMetadata.prototype, {
+    // offset pointerSize
+    flags: {
+        get() {
+            return new ExistentialTypeFlags(Memory.readPointer(this._ptr.add(Process.pointerSize)));
+        },
+        enumerable: true,
+    },
+    // offset 2*pointerSize
+    protocols: {
+        get() {
+            return new TargetProtocolDescriptorList(this._ptr.add(2*Process.pointerSize));
+        },
+        enumerable: true,
+    },
+
+    getRepresentation: {
+        value() {
+            // Some existentials use special containers.
+            switch (this.flags.getSpecialProtocol()) {
+                case "Error":
+                    return "Error";
+                case "None":
+                    break;
+            }
+            // The layout of standard containers depends on whether the existential is
+            // class-constrained.
+            if (this.isClassBounded())
+                return "Class";
+            return "Opaque";
+        },
+        enumerable: true,
+    },
+    isObjC: {
+        value() {
+            return this.isClassBounded() && this.flags.getNumWitnessTables() == 0;
+        },
+        enumerable: true,
+    },
+    isClassBounded: {
+        value() {
+            return this.flags.getClassConstraint() == "Class";
+        },
+        enumerable: true,
+    },
+    getSuperclassConstraint: {
+        value() {
+            if (!this.flags.hasSuperclassConstraint())
+                return null;
+
+            // Get a pointer to tail-allocated storage for this metadata record.
+            // The superclass immediately follows the list of protocol descriptors.
+            let ptr = this._ptr.add(Process.pointerSize * (3 + this.protocols.numProtocols));
+
+            return new TargetMetadata(Memory.readPointer(ptr));
+        },
+        enumerable: true,
+    },
+    /*mayTakeValue*/
+    /*deinitExistentialContainer*/
+    /*projectValue*/
+    /*getDynamicType*/
+    /*getWitnessTable*/
+});
+
+function TargetProtocolDescriptorList(pointer) {
+    this._ptr = pointer;
+}
+TargetProtocolDescriptorList.prototype = {
+    // offset 0
+    get numProtocols() {
+        return Memory.readPointer(this._ptr).toInt32();
+    },
+    // offset pointerSize
+    get protocols() {
+        let res = [];
+        let numProtocols = this.numProtocols;
+        for (let i = 0; i < numProtocols; i++) {
+            res.push(new TargetProtocolDescriptor(Memory.readPointer(this._ptr.add((i + 1) * Process.pointerSize))));
+        }
+        return res;
+    }
+}
+function TargetProtocolDescriptor(pointer) {
+    this._ptr = pointer;
+}
+TargetProtocolDescriptor.prototype = {
+    // offset 0
+    get _ObjC_Isa() {
+        return Memory.readPointer(this._ptr.add(0));
+    },
+    // offset pointerSize
+    get name() {
+        return Memory.readUtf8String(Memory.readPointer(this._ptr.add(Process.pointerSize)));
+    },
+    // offset 2*pointerSize
+    get inheritedProtocols() {
+        return new TargetProtocolDescriptorList(Memory.readPointer(this._ptr.add(2 * Process.pointerSize)));
+    },
+
+    // .. some more fields
+};
+
 const TargetFunctionTypeFlags = {
     NumArgumentsMask: 0x00FFFFFF,
     ConventionMask: 0x0F000000,
@@ -1020,4 +1155,5 @@ module.exports = {
     TypeMetadataRecordKind: TypeMetadataRecordKind,
     FieldTypeFlags: FieldTypeFlags,
     FunctionMetadataConvention: FunctionMetadataConvention,
+    MetadataKind: MetadataKind,
 };
