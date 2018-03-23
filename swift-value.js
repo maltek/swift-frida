@@ -53,15 +53,22 @@ let swiftValueProxy = {
 
         if ("fields" in obj.$type) {
             if (!("_$fields" in obj))
-                obj.$_fields = obj.$type.fields();
-            let field = obj._$fields.find(f => f.name === property);
+                obj._$fields = obj.$type.fields();
+            let field = null;
+            for (let f of obj._$fields) {
+                if (f.name === property) {
+                    field = f;
+                    break;
+                }
+            }
             if (field) {
+
                 // TODO: check indirect/weak flags
                 if (obj.$type.kind === "Struct")
-                    return new SwiftValue(field.type, obj.$pointer.add(field.offset));
+                    return new field.type(obj.$pointer.add(field.offset));
                 else
                     // TODO: need to dereference here
-                    return new SwiftValue(field.type, obj.$pointer.add(field.offset));
+                    return new field.type(obj.$pointer.add(field.offset));
             }
         }
 
