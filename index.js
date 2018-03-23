@@ -252,6 +252,7 @@ function Type(nominalType, canonicalType, name, accessFunction) {
     }
 }
 Type.prototype = {
+    constructor: Type,
     isGeneric() {
         if (this.accessFunction)
             return true;
