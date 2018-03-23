@@ -262,6 +262,11 @@ Type.prototype = {
     },
 
     toString() {
+        if (this.canonicalType) {
+            let [pointer, len] = Swift._api.swift_getTypeName(this.canonicalType._ptr, /* qualified? */ 1);
+            return Memory.readUtf8String(pointer, len.toInt32());
+        }
+
         if (this.nominalType) {
             let name = Swift.demangle(this.nominalType.mangledName);
             if (this.nominalType.genericParams.isGeneric()) {
@@ -282,40 +287,10 @@ Type.prototype = {
             return name;
         }
 
-        switch (this.kind) {
-            case "Class":
-            case "Struct":
-            case "Enum":
-            case "Optional":
-                throw Error("class or value type without nominalType");
-            case "Tuple":
-                return "(" + this.tupleElements().map(e =>
-                    (e.label === null ? "" : e.label + ": ") + e.type.toString()
-                ).join(", ") + ")";
-            case "Function":
-                return "(" + this.getArguments().map(a =>
-                    (a.inout ? "inout " : "") + a.type.toString()
-                ).join(", ") + ") -> " + this.returnType().toString();
-            case "ForeignClass":
-                return Swift.demangle(mangling.MANGLING_PREFIX + this.canonicalType.name);
-            case "ObjCClassWrapper":
-                return Memory.readUtf8String(ObjC.api.class_getName(this.canonicalType.class_));
-            case "Existential": {
-                let str = "Existential" + this.canonicalType.getRepresentation() + "@" + this.canonicalType._ptr.toString();
-                if (this.canonicalType.getSuperclassConstraint())
-                    str += " inheriting from " + new Type(null, this.canonicalType.getSuperclassConstraint()).toString();
-                let protocols = this.canonicalType.protocols;
-                if (protocols.numProtocols)
-                    str += " implementing " + protocols.protocols.map(p => p.name).join(", ");
-                return str;
-            }
-            case "Opaque":
-            case "Unknown":
-                if (this.name)
-                    return this.name;
-            default:
-                throw Error("not yet implemented: " + this.kind);
-        }
+        if (this.name)
+            return this.name;
+
+        throw Error(`cannot get string representation for type without nominal or canonical type information`);
     },
 };
 
@@ -552,6 +527,8 @@ Swift = module.exports = {
                     "swift_getFunctionTypeMetadata": ['pointer', ['pointer']],
                     "swift_getForeignTypeMetadata": ['pointer', ['pointer']],
                     "swift_getMetatypeMetadata": ['pointer', ['pointer']],
+
+                    "swift_getTypeName": [['pointer', 'pointer'],  ['pointer', 'uchar']],
 
                     "_T0s16_DebuggerSupportO20stringForPrintObjectSSypFZ": ['void', OpaqueExistentialContainer],
                     "_T0s4dumpxx_q_z2toSSSg4nameSi6indentSi8maxDepthSi0E5Itemsts16TextOutputStreamR_r0_lF": ['void', ['void', 'void', 'void', 'void', 'void', 'void', 'void']],
