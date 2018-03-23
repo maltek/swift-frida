@@ -85,7 +85,7 @@ function Type(nominalType, canonicalType, name, accessFunction) {
     if (accessFunction) {
         if (nominalType || canonicalType || !name)
             throw Error("type access function must only be provided if the type is not known");
-        this.name = name;
+        this.fixedName = name;
         this.accessFunction = accessFunction;
     }
 
@@ -182,7 +182,7 @@ function Type(nominalType, canonicalType, name, accessFunction) {
                         results.push({
                             name: Memory.readUtf8String(fieldName),
                             offset: Memory.readPointer(fieldOffsets.add(j * Process.pointerSize)),
-                            type: new Type(null, type, "?Unknown type of " +  this.name),
+                            type: new Type(null, type, "?Unknown type of " +  this.toString()),
                             indirect: (typeFlags & types.FieldTypeFlags.Indirect) === types.FieldTypeFlags.Indirect,
                             weak: (typeFlags & types.FieldTypeFlags.Weak) === types.FieldTypeFlags.Weak,
                         });
@@ -231,7 +231,7 @@ function Type(nominalType, canonicalType, name, accessFunction) {
     if (this.kind == "Opaque") {
         if (!name)
             throw Error("a name is required when creating Opaque types");
-        this.name = name;
+        this.fixedName = name;
     }
 
     if (canonicalType) {
@@ -287,8 +287,8 @@ Type.prototype = {
             return name;
         }
 
-        if (this.name)
-            return this.name;
+        if (this.fixedName)
+            return this.fixedName;
 
         throw Error(`cannot get string representation for type without nominal or canonical type information`);
     },
