@@ -4,6 +4,7 @@
 
 const types = require('./types');
 const mangling = require('./mangling');
+const swiftValue = require('./swift-value.js');
 let Swift;
 
 let size_t = Process.pointerSize === 8 ? 'uint64' : Process.pointerSize === 4 ? 'uint32' : "unsupported platform";
@@ -247,8 +248,15 @@ function Type(nominalType, canonicalType, name, accessFunction) {
         };
     }
 
-    if (!canonicalType && !this.isGeneric()) {
-        return this.withGenericParams();
+    if (!this.isGeneric()) {
+        if (!canonicalType) {
+            return this.withGenericParams();
+        } else {
+            let func = swiftValue.makeSwiftValue(this);
+            Object.assign(func, this);
+            Reflect.setPrototypeOf(func, Type.prototype);
+            return func;
+        }
     }
 }
 Type.prototype = {
@@ -528,6 +536,9 @@ Swift = module.exports = {
                     "swift_getFunctionTypeMetadata": ['pointer', ['pointer']],
                     "swift_getForeignTypeMetadata": ['pointer', ['pointer']],
                     "swift_getMetatypeMetadata": ['pointer', ['pointer']],
+
+                    "swift_getEnumCaseSinglePayload": ['int',  ['pointer', 'pointer', 'uint']],
+                    "swift_getEnumCaseMultiPayload": ['uint',  ['pointer', 'pointer']],
 
                     "swift_getTypeName": [['pointer', 'pointer'],  ['pointer', 'uchar']],
 
