@@ -273,7 +273,11 @@ Type.prototype = {
     toString() {
         if (this.canonicalType) {
             let [pointer, len] = Swift._api.swift_getTypeName(this.canonicalType._ptr, /* qualified? */ 1);
-            return Memory.readUtf8String(pointer, len.toInt32());
+            let str = Memory.readUtf8String(pointer, len.toInt32());
+            if (str === "<<< invalid type >>>" && this.fixedName) {
+                return this.fixedName;
+            }
+            return str;
         }
 
         if (this.nominalType) {
