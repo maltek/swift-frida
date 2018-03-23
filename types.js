@@ -305,9 +305,10 @@ function TargetMetadata(pointer) {
         case "Class":
             return new TargetClassMetadata(pointer);
         case "Struct":
+            return new TargetValueMetadata(pointer);
         case "Enum":
         case "Optional":
-            return new TargetValueMetadata(pointer);
+            return new TargetEnumMetadata(pointer);
         case "Tuple":
             return new TargetTupleTypeMetadata(pointer);
         case "Function":
@@ -512,8 +513,6 @@ function TargetValueMetadata(pointer) {
 
     switch (this.kind) {
         case "Struct":
-        case "Enum":
-        case "Optional":
             break;
         default:
             throw Error("type is not a value type");
@@ -556,6 +555,28 @@ TargetValueMetadata.prototype = Object.create(TargetMetadata.prototype, {
             if (this.description.isNull())
                 return null;
             return new TargetNominalTypeDescriptor(this.description);
+        },
+        enumerable: true,
+    },
+});
+function TargetEnumMetadata(pointer) {
+    this._ptr = pointer;
+
+    switch (this.kind) {
+        case "Enum":
+        case "Optional":
+            break;
+        default:
+            throw Error("type is not an enum type");
+    }
+}
+TargetEnumMetadata.prototype = Object.create(TargetValueMetadata.prototype, {
+    getPayloadSize: {
+        get(nominalType) {
+            if (!nominalType.enum_.hasPayloadSizeOffset())
+                return ptr(0);
+
+            return Memory.readPointer(this._ptr.add(nominalType.enum_.getPayloadSizeOffset() * Process.pointerSize));
         },
         enumerable: true,
     },
@@ -994,7 +1015,7 @@ TargetNominalTypeDescriptor.prototype = {
             },
             hasPayloadSizeOffset() {
                 return this.getPayloadSizeOffset() !== 0;
-            }
+            },
         };
     },
 
