@@ -431,7 +431,7 @@ Swift = module.exports = {
         if (innerTypes.length != labels.length)
             throw Error("labels array and innerTypes array need the same length!");
         let elements = innerTypes.length ? Memory.alloc(Process.pointerSize * innerTypes.length) : ptr(0);
-        let labelsStr = Memory.allocUtf8String(labels.join(" "));
+        let labelsStr = Memory.allocUtf8String(labels.join(" ") + " ");
         this._leakedLabels.push(labelsStr); // if the tuple type is new, we must not ever dealllocate this string
         for (let i = 0; i < innerTypes.length; i++) {
             Memory.writePointer(elements.add(i * Process.pointerSize), innerTypes[i].canonicalType._ptr);
