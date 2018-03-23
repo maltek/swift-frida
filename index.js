@@ -242,6 +242,21 @@ function Type(nominalType, canonicalType, name, accessFunction) {
         if (!name)
             throw Error("a name is required when creating Opaque types");
         this.fixedName = name;
+
+        this.getSize = function getSize() {
+            const knownSizes = {
+                "Builtin.Int8": 1,
+                "Builtin.Int16": 2,
+                "Builtin.Int32": 4,
+                "Builtin.Int64": 8,
+                "Builtin.Int128": 16,
+                "Builtin.Int256": 32,
+                "Builtin.Int512": 64,
+                "Builtin.RawPointer": Process.pointerSize,
+                // TODO: others (git grep -wE 'Builtin\.\w+' | grep -owE 'Builtin\.[A-Z]\w+' | sort -u)
+            };
+            return knownSizes[this.fixedName];
+        };
     }
 
     if (canonicalType) {
