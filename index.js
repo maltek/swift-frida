@@ -80,9 +80,18 @@ const OpaqueExistentialContainer = [
                                         ['pointer', 'pointer', 'pointer'], // void *fixedSizeBuffer[3];
                                         'pointer', // Metadata *type
                                         // WitnessTable *witnessTables[NUM_WITNESS_TABLES]; (depending on the number of protocols required for the type -- for the Any type, no witness tables should be there)
-                                   ]
+                                   ];
+
+const typesByCanonical = new Map();
 
 function Type(nominalType, canonicalType, name, accessFunction) {
+    if (canonicalType && typesByCanonical.has(canonicalType._ptr.toString())) {
+        let unique = typesByCanonical.get(canonicalType._ptr.toString());
+        if (name && !unique.fixedName)
+            unique.fixedName = name;
+        return unique;
+    }
+
     if (accessFunction) {
         if (nominalType || canonicalType || !name)
             throw Error("type access function must only be provided if the type is not known");
@@ -255,6 +264,7 @@ function Type(nominalType, canonicalType, name, accessFunction) {
             let func = swiftValue.makeSwiftValue(this);
             Object.assign(func, this);
             Reflect.setPrototypeOf(func, Type.prototype);
+            typesByCanonical.set(this.canonicalType._ptr.toString(), func);
             return func;
         }
     }
