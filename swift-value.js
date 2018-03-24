@@ -2,12 +2,12 @@ const types = require('./types');
 
 let swiftValueProxy = {
     get(obj, property) {
-        if (Reflect.has(obj, property)) {
-            return obj[property];
-        }
-
         if (property === 'toString') {
             return swiftToString(obj.$type, obj.$pointer);
+        }
+
+        if (Reflect.has(obj, property)) {
+            return obj[property];
         }
 
         if (property === '$enumCase') {
