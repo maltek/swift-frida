@@ -64,11 +64,19 @@ let swiftValueProxy = {
             if (field) {
 
                 // TODO: check indirect/weak flags
+                let addr;
                 if (obj.$type.kind === "Struct")
-                    return new field.type(obj.$pointer.add(field.offset));
+                    addr = obj.$pointer.add(field.offset);
                 else
                     // TODO: need to dereference here
-                    return new field.type(obj.$pointer.add(field.offset));
+                    addr = obj.$pointer.add(field.offset);
+
+                if ("toJS" in field.type) {
+                    let val = field.type.toJS(addr);
+                    if (val !== undefined)
+                        return val;
+                }
+                return new field.type(addr);
             }
         }
 

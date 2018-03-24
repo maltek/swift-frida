@@ -203,6 +203,15 @@ function Type(nominalType, canonicalType, name, accessFunction) {
             };
         }
     }
+    if (this.kind === "Struct" && canonicalType && this.toString() === "Swift.Boolean") {
+        this.toJS = function toJS(address) {
+            return Memory.readU8(address) !== 0;
+        };
+        this.fromJS = function fromJS(address, value) {
+            Memory.writeU8(address, value ? 1 : 0);
+            return true;
+        };
+    }
     if (this.kind === "Tuple") {
         this.tupleElements = function tupleElements() {
             let labels = canonicalType.labels;
@@ -252,10 +261,52 @@ function Type(nominalType, canonicalType, name, accessFunction) {
                 "Builtin.Int128": 16,
                 "Builtin.Int256": 32,
                 "Builtin.Int512": 64,
+                "Builtin.UInt8": 1,
+                "Builtin.UInt16": 2,
+                "Builtin.UInt32": 4,
+                "Builtin.UInt64": 8,
+                "Builtin.UInt128": 16,
+                "Builtin.UInt256": 32,
+                "Builtin.UInt512": 64,
                 "Builtin.RawPointer": Process.pointerSize,
                 // TODO: others (git grep -wE 'Builtin\.\w+' | grep -owE 'Builtin\.[A-Z]\w+' | sort -u)
             };
             return knownSizes[this.fixedName];
+        };
+        this.toJS = function toJS(pointer) {
+            if (this.fixedName === "Builtin.RawPointer") {
+                return Memory.readPointer(pointer);
+            }
+
+            let size = this.getSize();
+            if (size === undefined || size > 8)
+                return undefined;
+            if (this.fixedName.indexOf("Builtin.Int") === 0) {
+                return Memory['readS' + size*8](pointer);
+            } else if (this.fixedName.indexOf("Builtin.UInt") === 0) {
+                return Memory['readU' + size*8](pointer);
+            }
+
+            return undefined;
+        };
+        this.fromJS = function fromJS(address, value) {
+            if (this.fixedName === "Builtin.RawPointer") {
+                Memory.writePointer(address, value);
+                return true;
+            }
+
+            let size = this.getSize();
+            if (size === undefined || size > 8)
+                return false;
+            if (this.fixedName.indexOf("Builtin.Int") === 0) {
+                Memory['writeS' + size*8](address, value);
+                return true;
+            } else if (this.fixedName.indexOf("Builtin.UInt") === 0) {
+                Memory['writeU' + size*8](address, value);
+                return true;
+            }
+
+            return false;
         };
     }
 
