@@ -573,16 +573,17 @@ Swift = module.exports = {
 
                     "_T0s16_DebuggerSupportO20stringForPrintObjectSSypFZ": ['void', OpaqueExistentialContainer],
                     "_T0s4dumpxx_q_z2toSSSg4nameSi6indentSi8maxDepthSi0E5Itemsts16TextOutputStreamR_r0_lF": ['void', ['void', 'void', 'void', 'void', 'void', 'void', 'void']],
+
                 },
             }
         ];
         let remaining = 0;
         pending.forEach(api => {
             const functions = api.functions || {};
-            const variables = api.variables || {};
+            const variables = api.variables || new Set();
             const optionals = api.optionals || {};
 
-            remaining += Object.keys(functions).length + Object.keys(variables).length;
+            remaining += Object.keys(functions).length + variables.size;
 
             const exportByName = Module
             .enumerateExportsSync(api.module)
@@ -609,16 +610,16 @@ Swift = module.exports = {
                 }
             });
 
-            Object.keys(variables)
+            variables
             .forEach(function (name) {
                 const exp = exportByName[name];
                 if (exp !== undefined && exp.type === 'variable') {
-                    const handler = variables[name];
-                    handler.call(temporaryApi, exp.address);
+                    temporaryApi[name] = exp.address;
                     remaining--;
                 }
             });
         });
+
 
         if (remaining === 0) {
             _api = temporaryApi;
