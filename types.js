@@ -53,6 +53,141 @@ function ValueWitnessTable(pointer) {
     this._vwt = pointer;
 }
 ValueWitnessTable.prototype = Object.create(TypeLayout.prototype, {
+    // offset 0
+    destroyBuffer: {
+        value() {
+            // void destroyBuffer(ValueBuffer *buffer, const Metadata *self);
+            return new NativeFunction(Memory.readPointer(this._vwt.add(0), 'void', ['pointer', 'pointer']));
+        },
+    },
+    // offset pointerSize
+    initializeBufferWithCopyOfBuffer: {
+        value() {
+            // OpaqueValue *initializeBufferWithCopyOfBuffer(ValueBuffer *dest, ValueBuffer *src, const Metadata *self)
+            return new NativeFunction(Memory.readPointer(this._vwt.add(1*Process.pointerSize), 'pointer',
+                                                         ['pointer', 'pointer', 'pointer']));
+        },
+    },
+    // offset 2*pointerSize
+    projectBuffer: {
+        value() {
+            // OpaqueValue *projectBuffer(ValueBuffer *buffer, const Metadata *self)
+            return new NativeFunction(Memory.readPointer(this._vwt.add(2*Process.pointerSize), 'pointer',
+                                                         ['pointer', 'pointer']));
+        },
+    },
+    // offset 3*pointerSize
+    deallocateBuffer: {
+        value() {
+            // void deallocateBuffer(ValueBuffer *buffer, const Metadata *self)
+            return new NativeFunction(Memory.readPointer(this._vwt.add(3*Process.pointerSize), 'void',
+                                                         ['pointer', 'pointer']));
+        },
+    },
+    // offset 4*pointerSize
+    destroy: {
+        value() {
+            // void destroy(OpaqueValue *object, const Metadata *self)
+            return new NativeFunction(Memory.readPointer(this._vwt.add(4*Process.pointerSize), 'void',
+                                                         ['pointer', 'pointer']));
+        },
+    },
+    // offset 5*pointerSize
+    initializeBufferWithCopy: {
+        value() {
+            // OpaqueValue *initializeBufferWithCopy(ValueBuffer *dest, OpaqueValue *src, const Metadata *self)
+            return new NativeFunction(Memory.readPointer(this._vwt.add(5*Process.pointerSize), 'pointer',
+                                                         ['pointer', 'pointer', 'pointer']));
+        },
+    },
+    // offset 6*pointerSize
+    initializeWithCopy: {
+        value() {
+            // OpaqueValue *initializeWithCopy(OpaqueValue *dest, OpaqueValue *src, const Metadata *self)
+            return new NativeFunction(Memory.readPointer(this._vwt.add(6*Process.pointerSize), 'pointer',
+                                                         ['pointer', 'pointer', 'pointer']));
+        },
+    },
+    // offset 7*pointerSize
+    assignWithCopy: {
+        value() {
+            // OpaqueValue *assignWithCopy(OpaqueValue *dest, OpaqueValue *src, const Metadata *self)
+            return new NativeFunction(Memory.readPointer(this._vwt.add(7*Process.pointerSize), 'pointer',
+                                                         ['pointer', 'pointer', 'pointer']));
+        },
+    },
+    // offset 8*pointerSize
+    initializeBufferWithTake: {
+        value() {
+            // OpaqueValue *initializeBufferWithTake(ValueBuffer *dest, OpaqueValue *src, const Metadata *self)
+            return new NativeFunction(Memory.readPointer(this._vwt.add(8*Process.pointerSize), 'pointer',
+                                                         ['pointer', 'pointer', 'pointer']));
+        },
+    },
+    // offset 9*pointerSize
+    initializeWithTake: {
+        value() {
+            // OpaqueValue *initializeWithTake(OpaqueValue *dest, OpaqueValue *src, const Metadata *self)
+            return new NativeFunction(Memory.readPointer(this._vwt.add(9*Process.pointerSize), 'pointer',
+                                                         ['pointer', 'pointer', 'pointer']));
+        },
+    },
+    // offset 10*pointerSize
+    assignWithTake: {
+        value() {
+            // OpaqueValue *assignWithTake(OpaqueValue *dest, OpaqueValue *src, const Metadata *self)
+            return new NativeFunction(Memory.readPointer(this._vwt.add(10*Process.pointerSize), 'pointer',
+                                                         ['pointer', 'pointer', 'pointer']));
+        },
+    },
+    // offset 11*pointerSize
+    allocateBuffer: {
+        value() {
+            // OpaqueValue *allocateBuffer(ValueBuffer *buffer, const Metadata *self)
+            return new NativeFunction(Memory.readPointer(this._vwt.add(11*Process.pointerSize), 'pointer',
+                                                         ['pointer', 'pointer']));
+        },
+    },
+    // offset 12*pointerSize
+    initializeBufferWithTakeOfBuffer: {
+        value() {
+            // OpaqueValue *initializeBufferWithTakeOfBuffer(ValueBuffer *dest, ValueBuffer *src, const Metadata *self)
+            return new NativeFunction(Memory.readPointer(this._vwt.add(12*Process.pointerSize), 'pointer',
+                                                         ['pointer', 'pointer', 'pointer']));
+        },
+    },
+    // offset 13*pointerSize
+    destroyArray: {
+        value() {
+            // void destroyArray(OpaqueValue *array, size_t n, const Metadata *self)
+            return new NativeFunction(Memory.readPointer(this._vwt.add(13*Process.pointerSize), 'pointer',
+                                                         ['pointer', 'pointer', 'pointer']));
+        },
+    },
+    // offset 14*pointerSize
+    initializeArrayWithCopy: {
+        value() {
+            // OpaqueValue *initializeArrayWithCopy(OpaqueValue *dest, OpaqueValue *src, size_t n, const Metadata *self)
+            return new NativeFunction(Memory.readPointer(this._vwt.add(14*Process.pointerSize), 'pointer',
+                                                         ['pointer', 'pointer', 'pointer', 'pointer']));
+        },
+    },
+    // offset 15*pointerSize
+    initializeArrayWithTakeFrontToBack: {
+        value() {
+            // OpaqueValue *initializeArrayWithTakeFrontToBack(OpaqueValue *dest, OpaqueValue *src, size_t n, const Metadata *self)
+            return new NativeFunction(Memory.readPointer(this._vwt.add(15*Process.pointerSize), 'pointer',
+                                                         ['pointer', 'pointer', 'pointer', 'pointer']));
+        },
+    },
+    // offset 16*pointerSize
+    initializeArrayWithTakeBackToFront: {
+        value() {
+            // OpaqueValue *initializeArrayWithTakeBackToFront(OpaqueValue *dest, OpaqueValue *src, size_t n, const Metadata *self)
+            return new NativeFunction(Memory.readPointer(this._vwt.add(16*Process.pointerSize), 'pointer',
+                                                         ['pointer', 'pointer', 'pointer', 'pointer']));
+        },
+    },
     isValueInline: {
         value: function(size, alignment) {
             if (size !== undefined && alignment !== undefined)
