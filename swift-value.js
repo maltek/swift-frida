@@ -1,9 +1,121 @@
 const types = require('./types');
 
+
+function swiftToString(obj) {
+    let type = obj.$type;
+    let pointer = obj.$pointer;
+    /*
+     * built by disassembling the code for this snippet:
+     *
+        var str = String()
+        dump(x, to: &str)
+        let arr : [CChar] = str.cString(using: String.Encoding.utf8)!
+        let ptr = UnsafePointer<CChar>(arr)
+        strlen(ptr)
+     */
+    function __swift_destroy_boxed_opaque_existential_0(pointer) {
+        let opaque = new types.OpaqueExistentialContainer(pointer);
+        let type = opaque.type;
+        let vwt = opaque.type.valueWitnessTable;
+        if (vwt.flags.IsNonInline) {
+            let _swift_release_ = new NativeFunction(Memory.readPointer(Swift._api._swift_release), 'void', ['pointer']);
+            _swift_release_(opaque.fixedSizeBuffer[0]);
+        } else {
+            let destroy = vwt.destroy;
+            destroy(pointer, type._ptr);
+        }
+    }
+
+    let SwiftString = Swift._typesByName.get("Swift.String");
+    if (!SwiftString.canonicalType)
+        SwiftString = SwiftString.withGenericParams();
+
+    let dynamicType;
+
+    let copy = Memory.alloc(4 * Process.pointerSize);
+    let copyFn;
+    if (type.kind === "Existential" && type.getRepresentation() === "Opaque") {
+        dynamicType = Swift._api.swift_getDynamicType(pointer, type.canonicalType._ptr, 1);
+        copyFn = type.canonicalType.valueWitnessTable.initializeBufferWithCopyOfBuffer;
+    } else {
+        dynamicType = "$isaClass" in obj ? obj.$isaClass : type.canonicalType._ptr;
+        copyFn = type.canonicalType.valueWitnessTable.initializeBufferWithCopy;
+    }
+    copyFn(copy, pointer, dynamicType);
+    Memory.writePointer(copy.add(3 * Process.pointerSize), dynamicType);
+
+    let stringResult = Memory.alloc(Process.pointerSize * 3);
+    Memory.writePointer(stringResult, Swift._api._T0s19_emptyStringStorages6UInt32Vv);
+    Memory.writePointer(stringResult.add(Process.pointerSize), ptr(0));
+    Memory.writePointer(stringResult.add(2*Process.pointerSize), ptr(0));
+
+
+    let textOutputStreamWitnessTableForString = Swift._api._T0SSs16TextOutputStreamsWP;
+    let Any = Swift._api.swift_getExistentialTypeMetadata(1, ptr(0), 0, ptr(0));
+
+    let dump = Swift._api._T0s4dumpxx_q_z2toSSSg4nameSi6indentSi8maxDepthSi0E5Itemsts16TextOutputStreamR_r0_lF;
+
+    const LONG_MAX = Process.pointerSize == 4 ? ((1 << 31) - 1) : int64("0x1").shl(63).sub(1);
+    // TODO: default arguments should in theory be retrieved via generator functions
+    // 32bit: copy is passed directly on the stack, and we must use something like `initializeBufferWithCopyOfBuffer`
+    // to copy it there. 
+
+    let res = dump(/*value*/ copy, // passed as pointer
+        /*to*/ stringResult, // empty String
+        /*name*/ ptr(0), ptr(0), ptr(0), 1, // nil
+        /*indent*/ ptr(0),
+        /*maxDepth*/ LONG_MAX,
+        /*maxItems*/ LONG_MAX,
+        /*static type of `value`*/ Any,
+        /*static type of `to`*/ SwiftString.canonicalType._ptr,
+        /*how to use `to` as a TextOutputStream*/ textOutputStreamWitnessTableForString);
+
+    // We really should be calling ___swift_destroy_boxed_opaque_existential_0  on res
+    // but Frida already has deconstructed it into a struct for us.
+    // But we know that `dump` just returns a pointer to the container the `copy` parameter points to --
+    // so let's just destroy that.
+    /*let copyOfCopy = Memory.alloc(Process.pointerSize * 4);
+    Memory.copy(copyOfCopy, copy, Process.pointerSize * 4);
+    __swift_destroy_boxed_opaque_existential_0(copyOfCopy);*/
+
+    Swift._api.swift_unknownRetain(Memory.readPointer(stringResult.add(2*Process.pointerSize)));
+
+    let encoding = Memory.readPointer(Swift._api._T0SS10FoundationE8EncodingV4utf8ACfau());
+
+    let witnessTableStringProtocol = Swift._api._T0SSs14StringProtocolsWP;
+    let listener;
+    let toCStringPtr = Module.findExportByName("libswiftFoundation.dylib", "_T0s14StringProtocolP10FoundationsAARzSS5IndexVADRtzlE01cA0Says4Int8VGSgSSACE8EncodingV5using_tF");
+    let threadId = Process.getCurrentThreadId();
+    listener = Interceptor.attach(toCStringPtr, {
+        onEnter: function() {
+            if (threadId === this.threadId) {
+                let selfRegister = Process.pointerSize === 8 ? "x20" : "sl";
+                this.context.x20 = stringResult;
+                listener.detach();
+            }
+        },
+    });
+    console.log(""); // TODO: occasional crashes when this log is missing
+    let toCString = new NativeFunction(toCStringPtr, 'pointer', ['pointer', 'pointer', 'pointer']);
+    let array = toCString(encoding, SwiftString.canonicalType._ptr, witnessTableStringProtocol);
+
+    Swift._api.swift_unknownRelease(stringResult);
+
+    // the `BridgeObject` this `[CChar]?` contains somewhere deep down is Opaque, so we can't use type
+    // metadata to find this offset
+    let str = Memory.readUtf8String(array.add(8 + 3 * Process.pointerSize));
+
+    Swift._api.swift_unknownRelease(Memory.readPointer(stringResult.add(2*Process.pointerSize)));
+    Swift._api.swift_bridgeObjectRelease(array);
+
+    return str;
+}
+
+
 let swiftValueProxy = {
     get(obj, property) {
         if (property === 'toString') {
-            return swiftToString(obj.$type, obj.$pointer);
+            return () => swiftToString(new Proxy(obj, this));
         }
 
         if (Reflect.has(obj, property)) {
@@ -126,7 +238,9 @@ let swiftValueProxy = {
         throw TypeError("you can't override the prototype of a Swift value");
     },
     has(target, key) {
-        // TODO
+        if (this.get(target, key) === undefined)
+            return false;
+        return true;
     },
     ownKeys(target) {
         // TODO

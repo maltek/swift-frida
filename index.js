@@ -18,40 +18,6 @@ function strlen(pointer) {
 
 let _api = null;
 
-function toString(type, pointer) {
-    /*
-     * built by disassembling the code for this snippet:
-     *
-        var str = String()
-        dump(x, to: &str)
-        let arr : [CChar] = str.cString(using: String.Encoding.utf8)!
-        let ptr = UnsafePointer<CChar>(arr)
-        strlen(ptr)
-     */
-}
-
-// reads a Swift `String` from a NativePointer or an args-like array of NativePointers
-function readSwiftString(data) {
-    /*
-     * built by disassembling the code for this snippet:
-     *
-        let arr = x.cString(using: String.Encoding.utf8)!
-        let ptr = UnsafePointer<CChar>(arr)
-    */
-    let encoding = Memory.readPointer(_api._T0SS10FoundationE8EncodingV4utf8ACfau());
-    let stringType = Swift._typesByName.get("Swift.String");
-    let witnessTableStringProtocol = _api._T0SSs14StringProtocolsWP;
-
-    let toCString = _api._T0s14StringProtocolP10FoundationsAARzSS5IndexVADRtzlE01cA0Says4Int8VGSgSSACE8EncodingV5using_tF;
-    let array = toCString(encoding, stringType.canonicalType._ptr, witnessTableStringProtocol);
-    let pointer = array.add(8 + 3 * Process.pointerSize); // TODO: take this offset from type metadata
-    let str = Memory.readUtf8String(pointer);
-    _api.swift_bridgeObjectRelease(array);
-
-    return str;
-
-}
-
 // takes the JS string `str` and copies it to the NativePointer or args-like array of NativePointers in `dest`
 function jsStringToSwift(str, dest) {
     let cStr = Memory.allocUtf8String(val);
@@ -603,11 +569,18 @@ Swift = module.exports = {
                 // see https://github.com/apple/swift/blob/master/docs/Runtime.md
                 module: "libswiftCore.dylib",
                 variables: new Set([
-                    //"_T0SSs14StringProtocolsWP", // protocol witness table for Swift.String : Swift.StringProtocol in Swift
+                    "_T0SSs14StringProtocolsWP", // protocol witness table for Swift.String : Swift.StringProtocol in Swift
+                    "_T0SSs16TextOutputStreamsWP", // protocol witness table for Swift.String : Swift.TextOutputStream in Swift
+                    "_T0s19_emptyStringStorages6UInt32Vv", // Swift._emptyStringStorage
+                    "_swift_release", // pointer to _swift_release_
                 ]),
                 functions: {
                     "swift_bridgeObjectRelease": ['void', ['pointer']],
                     "swift_demangle": ['pointer', ['pointer', size_t, 'pointer', 'pointer', 'int32']],
+
+                    'swift_unknownRetain': ['void', ['pointer']],
+                    'swift_unknownRelease': ['void', ['pointer']],
+
                     //'swift_allocObject': ['pointer', ['pointer', size_t, size_t]],
                     //'swift_allocBox': [['pointer', 'pointer'], ['pointer']],
                     //'swift_deallocBox': ['void', ['pointer']],
@@ -615,7 +588,7 @@ Swift = module.exports = {
 
                     "swift_getTupleTypeMetadata": ['pointer', [size_t, 'pointer', 'pointer', 'pointer']],
                     //"swift_getExistentialMetatypeMetadata": ['pointer', ['pointer']],
-                    //"swift_getExistentialTypeMetadata": ['pointer', [size_t, 'pointer', size_t, 'pointer']],
+                    "swift_getExistentialTypeMetadata": ['pointer', ['int8', 'pointer', size_t, 'pointer']],
                     //'swift_getGenericMetadata': ['pointer', ['pointer', 'pointer']],
                     "swift_getObjCClassMetadata": ['pointer', ['pointer']],
                     "swift_getFunctionTypeMetadata": ['pointer', ['pointer']],
