@@ -1315,6 +1315,61 @@ TargetTypeMetadataRecord.prototype = {
     },
 }
 
+function OpaqueExistentialContainer(pointer) {
+    this._ptr = pointer;
+}
+OpaqueExistentialContainer.prototype = {
+    // offset 0
+    get fixedSizeBuffer() {
+        return [
+            Memory.readPointer(this._ptr.add(0)),
+            Memory.readPointer(this._ptr.add(Process.pointerSize)),
+            Memory.readPointer(this._ptr.add(2*Process.pointerSize)),
+        ];
+    },
+    // class types have a pointer in the fixedSizeBuffer
+    get heapObject() {
+        return new HeapObject(this.fixedSizeBuffer[0]);
+    },
+    // offset 3*pointerSize
+    get type() {
+        return new TargetMetadata(Memory.readPointer(this._ptr.add(3*Process.pointerSize)));
+    },
+    // offset 4*pointerSize
+    getWitnessTable(index) {
+        return Memory.readPointer(this._ptr.add((4 + index) * Process.pointerSize));
+    },
+};
+function ClassExistentialContainer(pointer) {
+    this._ptr = pointer;
+}
+ClassExistentialContainer.prototype = {
+    // offset 0
+    get heapObject() {
+        return new HeapObject(Memory.readPointer(this._ptr.add(0)));
+    },
+    // offset pointerSize
+    getWitnessTable(index) {
+        return Memory.readPointer(this._ptr.add((1 + index) * Process.pointerSize));
+    },
+};
+
+function HeapObject(pointer) {
+    this._ptr = pointer;
+}
+HeapObject.prototype = {
+    // offset 0
+    get heapMetadata() {
+        return new TargetMetadata(Memory.readPointer(this._ptr.add(0)));
+    },
+    // TODO: reference count stuff
+};
+
+const ProtocolClassConstraint = {
+    Class: 0,
+    Any: 1,
+};
+
 module.exports = {
     TargetMetadata: TargetMetadata,
     TargetClassMetadata: TargetClassMetadata,
@@ -1327,4 +1382,7 @@ module.exports = {
     FieldTypeFlags: FieldTypeFlags,
     FunctionMetadataConvention: FunctionMetadataConvention,
     MetadataKind: MetadataKind,
+    OpaqueExistentialContainer: OpaqueExistentialContainer,
+    ClassExistentialContainer: ClassExistentialContainer,
+    ProtocolClassConstraint: ProtocolClassConstraint,
 };
