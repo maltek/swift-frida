@@ -51,6 +51,15 @@ let swiftValueProxy = {
             }
         }
 
+        if (obj.$type.kind === "Class" || (obj.$type.kind === "Existential" && obj.$type.getRepresentation() === "Class")) {
+            if (property === "$isa")
+                return Memory.readPointer(Memory.readPointer(obj.$pointer).add(0));
+            if (property === "$isaClass")
+                return ObjC.api.object_getClass(Memory.readPointer(obj.$pointer).add(0)); // TODO: return Type object
+            if (property === "$retainCounts")
+                return Memory.readPointer(Memory.readPointer(obj.$pointer).add(Process.pointerSize));
+        }
+
         if ("fields" in obj.$type) {
             if (!("_$fields" in obj))
                 obj._$fields = obj.$type.fields();
