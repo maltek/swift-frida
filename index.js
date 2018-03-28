@@ -602,9 +602,9 @@ Swift = module.exports = {
             {
                 // see https://github.com/apple/swift/blob/master/docs/Runtime.md
                 module: "libswiftCore.dylib",
-                variables: [
+                variables: new Set([
                     //"_T0SSs14StringProtocolsWP", // protocol witness table for Swift.String : Swift.StringProtocol in Swift
-                ],
+                ]),
                 functions: {
                     "swift_bridgeObjectRelease": ['void', ['pointer']],
                     "swift_demangle": ['pointer', ['pointer', size_t, 'pointer', 'pointer', 'int32']],
@@ -626,20 +626,18 @@ Swift = module.exports = {
                     "swift_getEnumCaseMultiPayload": ['uint',  ['pointer', 'pointer']],
 
                     "swift_getTypeName": [['pointer', 'pointer'],  ['pointer', 'uchar']],
+                    "swift_getDynamicType": ['pointer', ['pointer', 'pointer', 'int8']],
 
                     "_T0s16_DebuggerSupportO20stringForPrintObjectSSypFZ": ['void', OpaqueExistentialContainer],
-                    "_T0s4dumpxx_q_z2toSSSg4nameSi6indentSi8maxDepthSi0E5Itemsts16TextOutputStreamR_r0_lF": ['void', ['void', 'void', 'void', 'void', 'void', 'void', 'void']],
+                    "_T0s4dumpxx_q_z2toSSSg4nameSi6indentSi8maxDepthSi0E5Itemsts16TextOutputStreamR_r0_lF": [[['pointer', 'pointer', 'pointer'], 'pointer'], ['pointer', 'pointer', 'pointer', 'pointer', 'pointer', 'int', 'pointer', 'long', 'long', 'pointer', 'pointer', 'pointer']],
 
                 },
             }
         ];
-        let remaining = 0;
         pending.forEach(api => {
             const functions = api.functions || {};
             const variables = api.variables || new Set();
             const optionals = api.optionals || {};
-
-            remaining += Object.keys(functions).length + variables.size;
 
             const exportByName = Module
             .enumerateExportsSync(api.module)
@@ -656,33 +654,25 @@ Swift = module.exports = {
                     if (typeof signature === 'function') {
                         signature.call(temporaryApi, exp.address);
                     } else {
-                        temporaryApi[name] = new NativeFunction(exp.address, signature[0], signature[1]);
+                        temporaryApi[name] = new NativeFunction(exp.address, signature[0], signature[1], signature[2]);
                     }
-                    remaining--;
-                } else {
-                    const optional = optionals[name];
-                    if (optional)
-                        remaining--;
+                } else if(!(name in optionals)) {
+                    throw Error(`missing function '${name}' in module '${api.module}`);
                 }
             });
 
-            variables
-            .forEach(function (name) {
+            variables.forEach(function (name) {
                 const exp = exportByName[name];
                 if (exp !== undefined && exp.type === 'variable') {
                     temporaryApi[name] = exp.address;
-                    remaining--;
+                } else if(!(name in optionals)) {
+                    throw Error(`missing variable '${name}' in module '${api.module}`);
                 }
             });
         });
 
 
-        if (remaining === 0) {
-            _api = temporaryApi;
-        } else {
-            throw Error("missing functions from Swift runtime: " + remaining);
-        }
-
+        _api = temporaryApi;
         return _api;
     },
 };
