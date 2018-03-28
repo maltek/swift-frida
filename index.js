@@ -311,6 +311,11 @@ function Type(nominalType, canonicalType, name, accessFunction) {
     }
 
     if (canonicalType) {
+        let size = canonicalType.valueWitnessTable.size; // TODO: Swift doesn't count the static overhead of classes here
+        this.getSize = function() { return size };
+        this.stride = canonicalType.valueWitnessTable.stride;
+        this.valueFlags = canonicalType.valueWitnessTable.flags;
+
         this.getGenericParams = function getGenericParams() {
             if (!canonicalType.getGenericArgs)
                 throw Error("generic arguments for this kind of type not implemented");
