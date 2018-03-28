@@ -1,5 +1,19 @@
 const types = require('./types');
 
+let selfPointers = new Map();
+// We need to hook this function at startup, because hooking it seems to happen asynchronously
+// (maybe because this is basically self-modifying code?) and we don't want to run into race-conditions.
+let toCStringPtr = Module.findExportByName("libswiftFoundation.dylib", "_T0s14StringProtocolP10FoundationsAARzSS5IndexVADRtzlE01cA0Says4Int8VGSgSSACE8EncodingV5using_tF");
+Interceptor.attach(toCStringPtr, {
+    onEnter: function() {
+        if (selfPointers.has(this.threadId)) {
+            let selfRegister = Process.pointerSize === 8 ? "x20" : "r10";
+            this.context[selfRegister] = selfPointers.get(this.threadId);
+            console.log(`${this.context[selfRegister]}`);
+            selfPointers.delete(this.threadId)
+        }
+    },
+});
 
 function swiftToString(obj) {
     let type = obj.$type;
@@ -77,29 +91,18 @@ function swiftToString(obj) {
     /*let copyOfCopy = Memory.alloc(Process.pointerSize * 4);
     Memory.copy(copyOfCopy, copy, Process.pointerSize * 4);
     __swift_destroy_boxed_opaque_existential_0(copyOfCopy);*/
-
-    Swift._api.swift_unknownRetain(Memory.readPointer(stringResult.add(2*Process.pointerSize)));
+    console.log(Memory.readPointer(stringResult));
+    console.log(Memory.readPointer(stringResult.add(4)));
+    console.log(Memory.readPointer(stringResult.add(8)));
 
     let encoding = Memory.readPointer(Swift._api._T0SS10FoundationE8EncodingV4utf8ACfau());
 
     let witnessTableStringProtocol = Swift._api._T0SSs14StringProtocolsWP;
     let listener;
-    let toCStringPtr = Module.findExportByName("libswiftFoundation.dylib", "_T0s14StringProtocolP10FoundationsAARzSS5IndexVADRtzlE01cA0Says4Int8VGSgSSACE8EncodingV5using_tF");
     let threadId = Process.getCurrentThreadId();
-    listener = Interceptor.attach(toCStringPtr, {
-        onEnter: function() {
-            if (threadId === this.threadId) {
-                let selfRegister = Process.pointerSize === 8 ? "x20" : "sl";
-                this.context.x20 = stringResult;
-                listener.detach();
-            }
-        },
-    });
-    console.log(""); // TODO: occasional crashes when this log is missing
     let toCString = new NativeFunction(toCStringPtr, 'pointer', ['pointer', 'pointer', 'pointer']);
+    selfPointers.set(threadId, stringResult);
     let array = toCString(encoding, SwiftString.canonicalType._ptr, witnessTableStringProtocol);
-
-    Swift._api.swift_unknownRelease(stringResult);
 
     // the `BridgeObject` this `[CChar]?` contains somewhere deep down is Opaque, so we can't use type
     // metadata to find this offset
