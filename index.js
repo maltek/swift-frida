@@ -602,7 +602,7 @@ Swift = module.exports = {
                     "swift_getDynamicType": ['pointer', ['pointer', 'pointer', 'int8']],
 
                     "_T0s16_DebuggerSupportO20stringForPrintObjectSSypFZ": ['void', OpaqueExistentialContainer],
-                    "_T0s4dumpxx_q_z2toSSSg4nameSi6indentSi8maxDepthSi0E5Itemsts16TextOutputStreamR_r0_lF": [[['pointer', 'pointer', 'pointer'], 'pointer'], ['pointer', 'pointer', 'pointer', 'pointer', 'pointer', 'int', 'pointer', 'long', 'long', 'pointer', 'pointer', 'pointer']],
+                    "_T0s4dumpxx_q_z2toSSSg4nameSi6indentSi8maxDepthSi0E5Itemsts16TextOutputStreamR_r0_lF": [[['pointer', 'pointer', 'pointer'], 'pointer'], ['pointer', 'pointer', 'pointer', 'pointer', 'pointer', 'int', 'pointer', 'pointer', 'pointer', 'pointer', 'pointer', 'pointer']],
 
                 },
             }

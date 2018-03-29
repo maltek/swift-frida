@@ -9,7 +9,6 @@ Interceptor.attach(toCStringPtr, {
         if (selfPointers.has(this.threadId)) {
             let selfRegister = Process.pointerSize === 8 ? "x20" : "r10";
             this.context[selfRegister] = selfPointers.get(this.threadId);
-            console.log(`${this.context[selfRegister]}`);
             selfPointers.delete(this.threadId)
         }
     },
@@ -69,7 +68,8 @@ function swiftToString(obj) {
 
     let dump = Swift._api._T0s4dumpxx_q_z2toSSSg4nameSi6indentSi8maxDepthSi0E5Itemsts16TextOutputStreamR_r0_lF;
 
-    const LONG_MAX = Process.pointerSize == 4 ? ((1 << 31) - 1) : int64("0x1").shl(63).sub(1);
+    const LONG_MAX = ptr(0).not().shr(1);
+
     // TODO: default arguments should in theory be retrieved via generator functions
     // 32bit: copy is passed directly on the stack, and we must use something like `initializeBufferWithCopyOfBuffer`
     // to copy it there. 
@@ -88,12 +88,7 @@ function swiftToString(obj) {
     // but Frida already has deconstructed it into a struct for us.
     // But we know that `dump` just returns a pointer to the container the `copy` parameter points to --
     // so let's just destroy that.
-    /*let copyOfCopy = Memory.alloc(Process.pointerSize * 4);
-    Memory.copy(copyOfCopy, copy, Process.pointerSize * 4);
-    __swift_destroy_boxed_opaque_existential_0(copyOfCopy);*/
-    console.log(Memory.readPointer(stringResult));
-    console.log(Memory.readPointer(stringResult.add(4)));
-    console.log(Memory.readPointer(stringResult.add(8)));
+    __swift_destroy_boxed_opaque_existential_0(copy);
 
     let encoding = Memory.readPointer(Swift._api._T0SS10FoundationE8EncodingV4utf8ACfau());
 
