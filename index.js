@@ -168,14 +168,25 @@ function Type(nominalType, canonicalType, name, accessFunction) {
             };
         }
     }
-    if (this.kind === "Struct" && canonicalType && this.toString() === "Swift.Boolean") {
-        this.toJS = function toJS(address) {
-            return Memory.readU8(address) !== 0;
-        };
-        this.fromJS = function fromJS(address, value) {
-            Memory.writeU8(address, value ? 1 : 0);
-            return true;
-        };
+    if (this.kind === "Struct" && canonicalType) {
+        switch (this.toString()) {
+            case "Swift.Boolean":
+                this.toJS = function (address) { return Memory.readU8(address) !== 0; };
+                this.fromJS = function (address, value) { Memory.writeU8(address, value ? 1 : 0); return true;
+                };
+                this.getSize = function getSize() { return 1; };
+                break;
+            case "Swift.UInt":
+                this.toJS = function(pointer) { return Memory.readULong(pointer); };
+                this.fromJS = function(pointer, value) { Memory.writeULong(pointer, value); return true; };
+                this.getSize = function() { return Process.pointerSize; };
+                break;
+            case "Swift.Int":
+                this.toJS = function(pointer) { return Memory.readLong(pointer); };
+                this.fromJS = function(pointer, value) { Memory.writeLong(pointer, value); return true; };
+                this.getSize = function() { return Process.pointerSize; };
+                break;
+        }
     }
     if (this.kind === "Tuple") {
         this.tupleElements = function tupleElements() {
