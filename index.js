@@ -90,14 +90,19 @@ function Type(nominalType, canonicalType, name, accessFunction) {
             }
 
             let args = [];
+            let names = [];
             for (let param of params) {
                 if (param.isGeneric() || !param.canonicalType)
                     throw Error("generic type parameter needs all own type parameters filled!");
                 args.push('pointer');
+                names.push(param.toString());
             }
+            let name = this.toString();
+            if (names.length !== 0)
+                name += "<" + names.join(", ") + ">";
             let accessFunc = new NativeFunction(accessFunction, 'pointer', args);
             let canonical = accessFunc.apply(null, params.map(t => t.canonicalType._ptr));
-            return new Type(this.nominalType, new types.TargetMetadata(canonical));
+            return new Type(this.nominalType, new types.TargetMetadata(canonical), name);
         };
     }
     if (this.nominalType && canonicalType) {
@@ -331,10 +336,8 @@ Type.prototype = {
         if (this.canonicalType) {
             let [pointer, len] = Swift._api.swift_getTypeName(this.canonicalType._ptr, /* qualified? */ 1);
             let str = Memory.readUtf8String(pointer, len.toInt32());
-            if (str === "<<< invalid type >>>" && this.fixedName) {
-                return this.fixedName;
-            }
-            return str;
+            if (str.length !== 0 && str !== "<<< invalid type >>>")
+                return str;
         }
 
         if (this.nominalType) {
@@ -359,8 +362,8 @@ Type.prototype = {
 
         if (this.fixedName)
             return this.fixedName;
-
-        throw Error(`cannot get string representation for type without nominal or canonical type information`);
+        return "<<< invalid type >>>";
+        //throw Error(`cannot get string representation for type without nominal or canonical type information`);
     },
 };
 
@@ -396,9 +399,17 @@ function findAllTypes(api) {
 
                 if (nominalType || canonicalType) {
                     let t = new Type(nominalType, canonicalType);
-                    typesByName.set(t.toString(), t);
+                    let name = t.toString();
+                    let insert = true;
+                    if (typesByName.has(name)) {
+                        let other = typesByName.get(name);
+                        if (!t.canonicalType || other.canonicalType)
+                            insert = false;
+                    }
+                    if (insert)
+                        typesByName.set(name, t);
                 } else {
-                    console.log("metadata record without nominal or canonical type?! @" + pointer.add(i));
+                    console.log(`metadata record without nominal or canonical type?! @${pointer.add(i)} of section ${section} in ${mod.name} ${record.getTypeKind()}`);
                 }
             }
         }
