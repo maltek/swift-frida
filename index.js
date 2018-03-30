@@ -181,12 +181,11 @@ function Type(nominalType, canonicalType, name, accessFunction) {
             };
         }
     }
-    if (this.kind === "Struct" && canonicalType) {
+    if (canonicalType) {
         switch (this.toString()) {
-            case "Swift.Boolean":
+            case "Swift.Bool":
                 this.toJS = function (address) { return Memory.readU8(address) !== 0; };
-                this.fromJS = function (address, value) { Memory.writeU8(address, value ? 1 : 0); return true;
-                };
+                this.fromJS = function (address, value) { Memory.writeU8(address, value ? 1 : 0); return true; };
                 this.getSize = function getSize() { return 1; };
                 break;
             case "Swift.UInt":
@@ -199,6 +198,26 @@ function Type(nominalType, canonicalType, name, accessFunction) {
                 this.fromJS = function(pointer, value) { Memory.writeLong(pointer, value); return true; };
                 this.getSize = function() { return Process.pointerSize; };
                 break;
+            case "Swift.Int8":
+            case "Swift.Int16":
+            case "Swift.Int32":
+            case "Swift.Int64":
+            case "Swift.Int128":
+            case "Swift.Int256":
+            case "Swift.Int512":
+            case "Swift.UInt8":
+            case "Swift.UInt16":
+            case "Swift.UInt32":
+            case "Swift.UInt64":
+            case "Swift.UInt128":
+            case "Swift.UInt256":
+            case "Swift.UInt512":
+            case "Swift.RawPointer":
+                console.log(this.toString().split(".")[1]);
+                this.toJS = (pointer) => this.fields()[0].type.toJS(pointer);
+                this.fromJS = (pointer, value) => this.fields()[0].type.fromJS(pointer, value);
+                this.getSize = () => this.fields()[0].type.getSize();
+                break
         }
     }
     if (this.kind === "Tuple") {
