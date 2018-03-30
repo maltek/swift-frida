@@ -283,7 +283,7 @@ TargetProtocolConformanceRecord.prototype = {
             case TypeMetadataRecordKind.Universal:
                 return null;
             case TypeMetadataRecordKind.UniqueDirectClass:
-              break;
+                break;
 
             case TypeMetadataRecordKind.UniqueDirectType:
             case TypeMetadataRecordKind.NonuniqueDirectType:

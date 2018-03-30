@@ -576,6 +576,12 @@ Swift = module.exports = {
                 }
             },
             {
+                module: "CoreFoundation",
+                functions: {
+                    "CFGetRetainCount": ['long', ['pointer']],
+                }
+            },
+            {
                 // see https://github.com/apple/swift/blob/master/docs/Runtime.md
                 module: "libswiftCore.dylib",
                 variables: new Set([
@@ -585,11 +591,14 @@ Swift = module.exports = {
                     "_swift_release", // pointer to _swift_release_
                 ]),
                 functions: {
-                    "swift_bridgeObjectRelease": ['void', ['pointer']],
                     "swift_demangle": ['pointer', ['pointer', size_t, 'pointer', 'pointer', 'int32']],
 
                     'swift_unknownRetain': ['void', ['pointer']],
                     'swift_unknownRelease': ['void', ['pointer']],
+                    'swift_bridgeObjectRelease': ['void', ['pointer']],
+                    'swift_weakLoadStrong': ['pointer', ['pointer']],
+                    'swift_weakAssign': ['void', ['pointer', 'pointer']],
+                    'swift_release': ['void', ['pointer']],
 
                     //'swift_allocObject': ['pointer', ['pointer', size_t, size_t]],
                     //'swift_allocBox': [['pointer', 'pointer'], ['pointer']],
