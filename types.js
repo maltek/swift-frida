@@ -44,7 +44,7 @@ TypeLayout.prototype = {
     // offset 3* pointerSize
     get extraInhabitantFlags() {
         if (!this.flags.HasExtraInhabitants)
-            throw Error("extra inhabitant flag not available");
+            throw new Error("extra inhabitant flag not available");
         return Memory.readPointer(this._ptr.add(3 * Process.pointerSize));
     },
 };
@@ -210,7 +210,7 @@ ValueWitnessTable.prototype = Object.create(TypeLayout.prototype, {
             if (size !== undefined && alignment !== undefined)
                 return (size <= 3 * Process.pointerSize && alignment <= Process.pointerSize);
             else if (size !== undefined)
-                throw Error("no overload with 1 argument");
+                throw new Error("no overload with 1 argument");
             else
                 return !this.flags.IsNonInline;
         },
@@ -273,7 +273,7 @@ TargetProtocolConformanceRecord.prototype = {
             case TypeMetadataRecordKind.UniqueDirectClass:
             case TypeMetadataRecordKind.UniqueIndirectClass:
             case TypeMetadataRecordKind.UniqueNominalTypeDescriptor:
-              throw Error("not direct type metadata");
+              throw new Error("not direct type metadata");
         }
         return new TargetMetadata(this.directType);
     },
@@ -289,7 +289,7 @@ TargetProtocolConformanceRecord.prototype = {
             case TypeMetadataRecordKind.NonuniqueDirectType:
             case TypeMetadataRecordKind.UniqueNominalTypeDescriptor:
             case TypeMetadataRecordKind.UniqueIndirectClass:
-              throw Error("not direct class object");
+              throw new Error("not direct class object");
         }
         return this.directType;
     },
@@ -305,7 +305,7 @@ TargetProtocolConformanceRecord.prototype = {
             case TypeMetadataRecordKind.UniqueDirectClass:
             case TypeMetadataRecordKind.NonuniqueDirectType:
             case TypeMetadataRecordKind.UniqueNominalTypeDescriptor:
-              throw Error("not indirect class object");
+              throw new Error("not indirect class object");
         }
         return this.indirectClass;
     },
@@ -322,7 +322,7 @@ TargetProtocolConformanceRecord.prototype = {
             case TypeMetadataRecordKind.UniqueIndirectClass:
             case TypeMetadataRecordKind.UniqueDirectType:
             case TypeMetadataRecordKind.NonuniqueDirectType:
-                throw Error("not generic metadata pattern");
+                throw new Error("not generic metadata pattern");
         }
 
         return new TargetNominalTypeDescriptor(this.typeDescriptor);
@@ -335,7 +335,7 @@ TargetProtocolConformanceRecord.prototype = {
                 break;
 
             case ProtocolConformanceReferenceKind.WitnessTableAccessor:
-                throw Error("not witness table");
+                throw new Error("not witness table");
         }
         return this.witnessTable;
     },
@@ -346,7 +346,7 @@ TargetProtocolConformanceRecord.prototype = {
                 break;
 
             case ProtocolConformanceReferenceKind.WitnessTable:
-                throw Error("not witness table accessor");
+                throw new Error("not witness table accessor");
         }
         return new NativeFunction(this.witnessTableAccessor, 'pointer', ['pointer']);
     },
@@ -476,7 +476,7 @@ function TargetMetadata(pointer) {
 TargetMetadata.prototype = {
     // offset -pointerSize
     get valueWitnessTable() {
-            return new ValueWitnessTable(Memory.readPointer(this._ptr.sub(Process.pointerSize)));
+        return new ValueWitnessTable(Memory.readPointer(this._ptr.sub(Process.pointerSize)));
     },
 
     get kind() {
@@ -498,7 +498,7 @@ TargetMetadata.prototype = {
 function TargetClassMetadata(pointer) {
     this._ptr = pointer;
     if (this.kind !== "Class")
-        throw Error("type is not a class type");
+        throw new Error("type is not a class type");
 }
 TargetClassMetadata.prototype = Object.create(TargetMetadata.prototype, {
     // offset -2 * pointerSize
@@ -631,9 +631,9 @@ TargetClassMetadata.prototype = Object.create(TargetMetadata.prototype, {
     getDescription: {
         value: function() {
             if(!this.isTypeMetadata())
-                throw Error("assertion error");
+                throw new Error("assertion error");
             if(this.isArtificialSubclass())
-                throw Error("assertion error");
+                throw new Error("assertion error");
             return this.description;
         },
         enumerable: true,
@@ -665,7 +665,7 @@ function TargetValueMetadata(pointer) {
         case "Struct":
             break;
         default:
-            throw Error("type is not a value type");
+            throw new Error("type is not a value type");
     }
 }
 TargetValueMetadata.prototype = Object.create(TargetMetadata.prototype, {
@@ -717,7 +717,7 @@ function TargetEnumMetadata(pointer) {
         case "Optional":
             break;
         default:
-            throw Error("type is not an enum type");
+            throw new Error("type is not an enum type");
     }
 }
 TargetEnumMetadata.prototype = Object.create(TargetValueMetadata.prototype, {
@@ -779,7 +779,7 @@ function TargetTupleTypeMetadata(pointer) {
     this._ptr = pointer;
 
     if (this.kind != "Tuple")
-        throw Error("type is not a tuple type");
+        throw new Error("type is not a tuple type");
 }
 TargetTupleTypeMetadata.prototype = Object.create(TargetMetadata.prototype, {
     // offset pointerSize
@@ -826,7 +826,7 @@ function TargetFunctionTypeMetadata(pointer) {
     this._ptr = pointer;
 
     if (this.kind != "Function")
-        throw Error("type is not a function type");
+        throw new Error("type is not a function type");
 }
 TargetFunctionTypeMetadata.prototype = Object.create(TargetMetadata.prototype, {
     // offset pointerSize
@@ -873,7 +873,7 @@ function TargetForeignTypeMetadata(pointer) {
     this._ptr = pointer;
 
     if (this.kind != "ForeignClass")
-        throw Error("type is not a foreign class type");
+        throw new Error("type is not a foreign class type");
 }
 TargetForeignTypeMetadata.prototype = Object.create(TargetMetadata.prototype, {
     // offset -2 * pointerSize
@@ -909,7 +909,7 @@ function TargetObjCClassWrapperMetadata(pointer) {
     this._ptr = pointer;
 
     if (this.kind !== "ObjCClassWrapper")
-        throw Error("type is not a ObjC class wrapper type");
+        throw new Error("type is not a ObjC class wrapper type");
 }
 TargetObjCClassWrapperMetadata.prototype = Object.create(TargetMetadata.prototype, {
     // offset pointerSize
@@ -948,7 +948,7 @@ function TargetExistentialTypeMetadata(pointer) {
     this._ptr = pointer;
 
     if (this.kind != "Existential")
-        throw Error("type is not a existential type");
+        throw new Error("type is not a existential type");
 }
 TargetExistentialTypeMetadata.prototype = Object.create(TargetMetadata.prototype, {
     // offset pointerSize
@@ -1199,7 +1199,7 @@ TargetNominalTypeDescriptor.prototype = {
             // offset 0
             get offset() {
                 if (!this.isGeneric())
-                    throw Error("not generic!");
+                    throw new Error("not generic!");
                 return Memory.readU32(ptr.add(0));
             },
             // offset 4
@@ -1263,10 +1263,10 @@ TargetTypeMetadataRecord.prototype = {
 
             case TypeMetadataRecordKind.UniqueIndirectClass:
             case TypeMetadataRecordKind.UniqueNominalTypeDescriptor:
-                throw Error("not direct type metadata");
+                throw new Error("not direct type metadata");
 
             default:
-                throw Error("invalid type kind");
+                throw new Error("invalid type kind");
         }
 
         return this._directType;
@@ -1284,10 +1284,10 @@ TargetTypeMetadataRecord.prototype = {
             case TypeMetadataRecordKind.UniqueIndirectClass:
             case TypeMetadataRecordKind.UniqueDirectType:
             case TypeMetadataRecordKind.NonuniqueDirectType:
-                throw Error("not generic metadata pattern");
+                throw new Error("not generic metadata pattern");
 
             default:
-                throw Error("invalid type kind");
+                throw new Error("invalid type kind");
         }
 
         return new TargetNominalTypeDescriptor(this._typeDescriptor);
