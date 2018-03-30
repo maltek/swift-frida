@@ -71,12 +71,9 @@ function swiftToString(obj) {
     const LONG_MAX = ptr(0).not().shr(1);
 
     // TODO: default arguments should in theory be retrieved via generator functions
-    // 32bit: copy is passed directly on the stack, and we must use something like `initializeBufferWithCopyOfBuffer`
-    // to copy it there. 
-
-    let res = dump(/*value*/ copy, // passed as pointer
-        /*to*/ stringResult, // empty String
-        /*name*/ ptr(0), ptr(0), ptr(0), 1, // nil
+    let res = dump(/*value*/ copy,
+        /*to*/ stringResult,
+        /*name*/ ptr(0), ptr(0), ptr(0), 1,
         /*indent*/ ptr(0),
         /*maxDepth*/ LONG_MAX,
         /*maxItems*/ LONG_MAX,
