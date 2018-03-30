@@ -509,7 +509,16 @@ TargetClassMetadata.prototype = Object.create(TargetMetadata.prototype, {
     // offset -2 * pointerSize
     destructor: {
         get() {
+            if (this.isPureObjC()) throw new Error("destructor not available for ObjC classes");
             return Memory.readPointer(this._ptr.sub(2 * Process.pointerSize));
+        },
+        enumerable: true,
+    },
+    // offset -1 * pointerSize
+    valueWitnessTable: {
+        get() {
+            if (this.isPureObjC()) throw new Error("valueWitnessTable not available for ObjC classes");
+            return new ValueWitnessTable(Memory.readPointer(this._ptr.sub(Process.pointerSize)));
         },
         enumerable: true,
     },
@@ -555,6 +564,7 @@ TargetClassMetadata.prototype = Object.create(TargetMetadata.prototype, {
     // offset 5 * pointerSize
     flags: {
         get() {
+            if (this.isPureObjC()) throw new Error("flags not available for ObjC classes");
             return flagsToObject(ClassFlags, Memory.readU32(this._ptr.add(5 * Process.pointerSize)));
         },
         enumerable: true,
@@ -562,6 +572,7 @@ TargetClassMetadata.prototype = Object.create(TargetMetadata.prototype, {
     // offset 5 * pointerSize + 4
     instanceAddressPoint: {
         get() {
+            if (this.isPureObjC()) throw new Error("instanceAddressPoint not available for ObjC classes");
             return Memory.readU32(this._ptr.add(4 + 5 * Process.pointerSize));
         },
         enumerable: true,
@@ -569,6 +580,7 @@ TargetClassMetadata.prototype = Object.create(TargetMetadata.prototype, {
     // offset 5 * pointerSize + 8
     instanceSize: {
         get() {
+            if (this.isPureObjC()) throw new Error("instanceSize not available for ObjC classes");
             return Memory.readU32(this._ptr.add(8 + 5 * Process.pointerSize));
         },
         enumerable: true,
@@ -576,6 +588,7 @@ TargetClassMetadata.prototype = Object.create(TargetMetadata.prototype, {
     // offset 5 * pointerSize + 12
     instanceAlignMask: {
         get() {
+            if (this.isPureObjC()) throw new Error("instanceAlignMask not available for ObjC classes");
             return Memory.readU16(this._ptr.add(12 + 5 * Process.pointerSize));
         },
         enumerable: true,
@@ -584,6 +597,7 @@ TargetClassMetadata.prototype = Object.create(TargetMetadata.prototype, {
     // offset 5 * pointerSize + 16
     classSize: {
         get() {
+            if (this.isPureObjC()) throw new Error("classSize not available for ObjC classes");
             return Memory.readU32(this._ptr.add(16 + 5 * Process.pointerSize));
         },
         enumerable: true,
@@ -591,6 +605,7 @@ TargetClassMetadata.prototype = Object.create(TargetMetadata.prototype, {
     // offset 5 * pointerSize + 20
     classAddressPoint: {
         get() {
+            if (this.isPureObjC()) throw new Error("classAddressPoint not available for ObjC classes");
             return Memory.readU32(this._ptr.add(20 + 5 * Process.pointerSize));
         },
         enumerable: true,
@@ -598,6 +613,7 @@ TargetClassMetadata.prototype = Object.create(TargetMetadata.prototype, {
     // offset 5 * pointerSize + 24
     description: {
         get() {
+            if (this.isPureObjC()) throw new Error("description not available for ObjC classes");
             return ConstTargetFarRelativeDirectPointer(this._ptr.add(24 + 5 * Process.pointerSize));
         },
         enumerable: true,
@@ -605,6 +621,7 @@ TargetClassMetadata.prototype = Object.create(TargetMetadata.prototype, {
     // offset 6 * pointerSize + 24
     iVarDestroyer: {
         get() {
+            if (this.isPureObjC()) throw new Error("iVarDestroyer not available for ObjC classes");
             return new NativePointer(Memory.readPointer(this._ptr.add(24 + 6 * Process.pointerSize)), 'void', ['pointer']);
         },
         enumerable: true,
