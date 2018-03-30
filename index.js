@@ -76,6 +76,14 @@ function Type(nominalType, canonicalType, name, accessFunction) {
             }
         }
     }
+
+    if (canonicalType && ((canonicalType.kind === "Class" && !canonicalType.flags.UsesSwift1Refcounting) ||
+            canonicalType.kind === "ObjCClassWrapper")) {
+        this.toJS = function(pointer) { return ObjC.Object(Memory.readPointer(pointer)); };
+        this.fromJS = function (address, value) { _api.objc_storeStrong(address, value); return true; };
+        this.getSize = function getSize() { return Process.pointerSize; };
+    }
+
     this.canonicalType = canonicalType;
     this.kind = canonicalType ? canonicalType.kind : accessFunction ? "Unknown" : null;
 
@@ -590,6 +598,12 @@ Swift = module.exports = {
                 module: "CoreFoundation",
                 functions: {
                     "CFGetRetainCount": ['long', ['pointer']],
+                }
+            },
+            {
+                module: "Foundation",
+                functions: {
+                    'objc_storeStrong': ['void', ['pointer', 'pointer']],
                 }
             },
             {
