@@ -159,7 +159,6 @@ function Type(nominalType, canonicalType, name, accessFunction) {
                             name: Memory.readUtf8String(fieldName),
                             offset: Memory.readPointer(fieldOffsets.add(j * Process.pointerSize)),
                             type: new Type(null, type, "?Unknown type of " +  this.toString()),
-                            indirect: (typeFlags & types.FieldTypeFlags.Indirect) === types.FieldTypeFlags.Indirect,
                             weak: (typeFlags & types.FieldTypeFlags.Weak) === types.FieldTypeFlags.Weak,
                         });
                         fieldName = fieldName.add(strlen(fieldName) + 1);
