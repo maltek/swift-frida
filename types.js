@@ -495,6 +495,11 @@ TargetMetadata.prototype = {
         return "[TargetMetadata: " + this.kind + "@" + this._ptr + "]";
     },
 };
+const ClassFlags = {
+    IsSwift1: 0x1,
+    UsesSwift1Refcounting: 0x2,
+    HasCustomObjCName: 0x4,
+};
 function TargetClassMetadata(pointer) {
     this._ptr = pointer;
     if (this.kind !== "Class")
@@ -550,7 +555,7 @@ TargetClassMetadata.prototype = Object.create(TargetMetadata.prototype, {
     // offset 5 * pointerSize
     flags: {
         get() {
-            return flagsToObject(GenericParameterDescriptorFlags, Memory.readU32(this._ptr.add(5 * Process.pointerSize)));
+            return flagsToObject(ClassFlags, Memory.readU32(this._ptr.add(5 * Process.pointerSize)));
         },
         enumerable: true,
     },
