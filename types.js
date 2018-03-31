@@ -217,6 +217,61 @@ ValueWitnessTable.prototype = Object.create(TypeLayout.prototype, {
         enumerable: true,
     },
 });
+function ExtraInhabitantsValueWitnessTable(pointer) {
+    ValueWitnessTable.call(this, pointer);
+}
+ExtraInhabitantsValueWitnessTable.prototype = Object.create(ValueWitnessTable.prototype, {
+    // offset 21*pointerSize
+    storeExtraInhabitant: {
+        value(dest, index, self) {
+            // void storeExtraInhabitant(OpaqueValue *dest, int index, const Metadata *self);
+            return (new NativeFunction(Memory.readPointer(this._vwt.add(21*Process.pointerSize)), 'void',
+                                                          ['pointer', 'int', 'pointer']))(dest, index, self);
+        },
+        enumerable: true,
+    },
+    // offset 22*pointerSize
+    getExtraInhabitant: {
+        value(src, self) {
+            // int getExtraInhabitantIndex(const OpaqueValue *src, const Metadata *self);
+            return (new NativeFunction(Memory.readPointer(this._vwt.add(22*Process.pointerSize)), 'int',
+                                                          ['pointer', 'pointer']))(src, self);
+        },
+        enumerable: true,
+    },
+});
+function EnumValueWitnessTable(pointer) {
+    ExtraInhabitantsValueWitnessTable.call(this, pointer);
+}
+EnumValueWitnessTable.prototype = Object.create(ExtraInhabitantsValueWitnessTable.prototype, {
+    // offset 23*pointerSize
+    getEnumTag: {
+        value(src, self) {
+            // int getEnumTag(const OpaqueValue *src, const Metadata *self);
+            return (new NativeFunction(Memory.readPointer(this._vwt.add(23*Process.pointerSize)), 'int',
+                                                          ['pointer', 'pointer']))(src, self);
+        },
+        enumerable: true,
+    },
+    // offset 24*pointerSize
+    destructiveProjectEnumData: {
+        value(src, self) {
+            // void destructiveProjectEnumData(OpaqueValue *src, const Metadata *self);
+            return (new NativeFunction(Memory.readPointer(this._vwt.add(24*Process.pointerSize)), 'void',
+                                                          ['pointer', 'pointer']))(src, self);
+        },
+        enumerable: true,
+    },
+    // offset 25*pointerSize
+    destructiveInjectEnumTag: {
+        value(src, tag, self) {
+            // void destructiveInjectEnumTag(OpaqueValue *src, int tag, const Metadata *self);
+            return (new NativeFunction(Memory.readPointer(this._vwt.add(25*Process.pointerSize)), 'void',
+                                                          ['pointer', 'int', 'pointer']))(src, tag, self);
+        },
+        enumerable: true,
+    },
+});
 
 function TargetProtocolConformanceRecord(ptr) {
     this._ptr = ptr;
@@ -743,10 +798,17 @@ function TargetEnumMetadata(pointer) {
     }
 }
 TargetEnumMetadata.prototype = Object.create(TargetValueMetadata.prototype, {
-    getPayloadSize: {
-        value(nominalType) {
+    valueWitnessTable: {
+        get() {
+            return new EnumValueWitnessTable(Memory.readPointer(this._ptr.sub(Process.pointerSize)));
+        },
+        enumerable: true,
+    },
+    payloadSize: {
+        get() {
+            let nominalType = this.getNominalTypeDescriptor();
             if (!nominalType.enum_.hasPayloadSizeOffset())
-                return ptr(0);
+                return null;
 
             return Memory.readPointer(this._ptr.add(nominalType.enum_.getPayloadSizeOffset() * Process.pointerSize));
         },
