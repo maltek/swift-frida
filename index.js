@@ -19,6 +19,7 @@ function strlen(pointer) {
 let _api = null;
 
 // takes the JS string `str` and copies it to the NativePointer or args-like array of NativePointers in `dest`
+// Untested, so it must be broken in a bunch of ways.
 function jsStringToSwift(str, dest) {
     let cStr = Memory.allocUtf8String(val);
     const sizeOfString = Process.pointerSize * 3;
@@ -37,16 +38,6 @@ function jsStringToSwift(str, dest) {
         dest[2] = Memory.readPointer(swiftStr.add(Process.pointerSize * 2));
     }
 }
-
-/*function anyToString(any) {
-// TODO: call String(reflecting: any).utf8CString
-}*/
-
-const OpaqueExistentialContainer = [
-                                        ['pointer', 'pointer', 'pointer'], // void *fixedSizeBuffer[3];
-                                        'pointer', // Metadata *type
-                                        // WitnessTable *witnessTables[NUM_WITNESS_TABLES]; (depending on the number of protocols required for the type -- for the Any type, no witness tables should be there)
-                                   ];
 
 const typesByCanonical = new Map();
 
@@ -663,10 +654,11 @@ Swift = module.exports = {
                     "swift_getEnumCaseSinglePayload": ['int',  ['pointer', 'pointer', 'uint']],
                     "swift_getEnumCaseMultiPayload": ['uint',  ['pointer', 'pointer']],
 
+                    'swift_conformsToProtocol': ['pointer', ['pointer', 'pointer']],
+
                     "swift_getTypeName": [['pointer', 'pointer'],  ['pointer', 'uchar']],
                     "swift_getDynamicType": ['pointer', ['pointer', 'pointer', 'int8']],
 
-                    "_T0s16_DebuggerSupportO20stringForPrintObjectSSypFZ": ['void', OpaqueExistentialContainer],
                     "_T0s4dumpxx_q_z2toSSSg4nameSi6indentSi8maxDepthSi0E5Itemsts16TextOutputStreamR_r0_lF": [[['pointer', 'pointer', 'pointer'], 'pointer'], ['pointer', 'pointer', 'pointer', 'pointer', 'pointer', 'int', 'pointer', 'pointer', 'pointer', 'pointer', 'pointer', 'pointer']],
 
                 },
