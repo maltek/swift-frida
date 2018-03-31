@@ -227,11 +227,20 @@ function makeWrapper(type, pointer, owned) {
 
     let wrapperObject = {};
     if (type.kind === "Function") {
-
-
-
         wrapperObject = makeFunctionWrapper(type, pointer);
     } else if (isClassType(type)) {
+        let object = Memory.readPointer(pointer);
+        let canonical = ObjC.api.object_getClass(object);
+        type = Swift._typeFromCanonical(canonical);
+    }
+
+    wrapperObject.$staticType = staticType;
+    wrapperObject.$type = type;
+    wrapperObject.$pointer = pointer;
+
+    wrapperObject.toString = swiftToString.bind(undefined, wrapperObject);
+
+    if (isClassType(type)) {
         Object.defineProperties(wrapperObject, {
             '$isa': {
                 enumerable: true,
@@ -248,16 +257,7 @@ function makeWrapper(type, pointer, owned) {
                 },
             },
         });
-        let object = Memory.readPointer(pointer);
-        let canonical = ObjC.api.object_getClass(object);
-        type = Swift._typeFromCanonical(canonical);
     }
-
-    wrapperObject.$staticType = staticType;
-    wrapperObject.$type = type;
-    wrapperObject.$pointer = pointer;
-
-    wrapperObject.toString = swiftToString.bind(undefined, wrapperObject);
 
     if ('enumCases' in type) {
         let enumCases = type.enumCases();
@@ -412,6 +412,7 @@ function makeWrapper(type, pointer, owned) {
             cnt++;
         }
     }
+
     let destroyWrapper = function() {
             Object.keys(wrapperObject).forEach(key => Reflect.deleteProperty(wrapperObject, key));
             pointer = undefined;
@@ -425,13 +426,14 @@ function makeWrapper(type, pointer, owned) {
     }
     wrapperObject.$assignWithCopy = function(val) {
         if ("$kind" in val) { // ObjC type
-            throw Error("ObjC types not yet supported");
+            throw Error("ObjC types not yet supported"); // TODO
         } else if ("fromJS" in type) {
             type.fromJS(pointer, val);
             return this;
         } else {
-            staticType.canonicalType.valueWitnessTable.assignWithCopy(pointer, val.$pointer, staticType.canonicalType);
-            let newWrapper = makeWrapper(pointer, val.$type);
+            // TODO: check that types are compatible
+            staticType.canonicalType.valueWitnessTable.assignWithCopy(pointer, val.$pointer, staticType.canonicalType._ptr);
+            let newWrapper = makeWrapper(pointer, val.$type, owned);
             destroyWrapper();
             return newWrapper;
         }
@@ -448,7 +450,7 @@ function makeSwiftValue(type) {
     }
 
     let SwiftValue = function (pointer) {
-        return makeWrapper(type, pointer);
+        return makeWrapper(type, pointer, false);
     };
     Reflect.defineProperty(SwiftValue, 'name', { value: type.toString() });
 
