@@ -110,6 +110,114 @@ function isClassType(t) {
     return t.kind === "Class" || (t.kind === "Existential" && t.getRepresentation() === "Class");
 }
 
+function makeFunctionWrapper(type, pointer) {
+    return function(...argList) {
+        if (type.kind !== "Function")
+            throw TypeError("this value has a non-function type, so it cannot be called");
+
+        let flags = type.functionFlags;
+        if (argList.length < flags.numArguments) {
+            throw TypeError("missing arguments: " + flags.numArguments + " arguments required");
+        } else if (argList.length > flags.numArguments) {
+            throw TypeError("too many arguments: " + flags.numArguments + " arguments required");
+        }
+
+        if (flags.doesThrow) {
+            throw Error("calling a function that can throw is not yet supported"); // TODO
+        }
+
+        switch (flags.convention) {
+            case types.FunctionMetadataConvention.Swift:
+                throw Error("calling Swift functions not yet supported");
+            case types.FunctionMetadataConvention.Block: {
+                let block = new ObjC.Block(pointer);
+                return block.implementation(...params);
+            }
+            case types.FunctionMetadataConvention.Thin:
+                throw Error("calling thin functions not yet supported");
+            case types.FunctionMetadataConvention.CFunctionPointer: {
+                let params = [];
+                let fridaTypes = [];
+                let argTypes = type.getArguments();
+
+                function convertType(swiftType, swiftOrJSVal) {
+                    let fridaType, jsVal;
+                    jsVal = ("toJS" in argType) ? argType.toJS(swiftOrJSVal.$pointer) : swiftOrJSVal;
+                    switch (argType.toString()) {
+                        case "Builtin.Int8":
+                        case "Swift.Int8":
+                            fridaType = "int8";
+                            break;
+                        case "Builtin.UInt8":
+                        case "Swift.UInt8":
+                            fridaType = "uint8";
+                            break;
+                        case "Builtin.Int16":
+                        case "Swift.Int16":
+                            fridaType = "int16";
+                            break;
+                        case "Builtin.UInt16":
+                        case "Swift.UInt16":
+                            fridaType = "uint16";
+                            break;
+                        case "Builtin.Int32":
+                        case "Swift.Int32":
+                            fridaType = "int32";
+                            break;
+                        case "Builtin.UInt32":
+                        case "Swift.UInt32":
+                            fridaType = "uint32";
+                            break;
+                        case "Builtin.Int64":
+                        case "Swift.Int64":
+                            fridaType = "int64";
+                            break;
+                        case "Builtin.UInt64":
+                        case "Swift.UInt64":
+                            fridaType = "uint64";
+                            break;
+                        case "Swift.Double":
+                            fridaType = "double";
+                            break;
+                        case "Swift.Float":
+                            fridaType = "float";
+                            break;
+                        case "()":
+                            fridaType = "void";
+                            jsVal = undefined;
+                            break;
+                        default:
+                            if (argType.nominalType && argType.nominalType.mangledName === "_T0SP") {
+                                fridaType = "pointer";
+                                if (swiftOrJsVal instanceof NativePointer)
+                                    jsVal = swiftOrJsVal;
+                                else if (jsVal !== undefined)
+                                    jsVal = Memory.readPointer(swiftOrJsVal.$pointer);
+                            } else {
+                                throw Error("don't know how to convert a '" + argType.toString() + "' to a C value!");
+                            }
+                    }
+
+                    return { fridaType: fridaType, jsVal: jsVal };
+                }
+
+                for (let i = 0; i < flags.numArguments; i++) {
+                    let res = convertType(argTypes[i], argList[i]);
+                    if (res.jsVal === undefined && res.fridaType !== "void") {
+                        throw Error("argument " + i + " must not be undefined");
+                    }
+                    fridaTypes.push(res.fridaType);
+                    params.push(res.jsVal);
+                }
+
+                let returnType = convertType(type.returnType, undefined);
+                let func = new NativeFunction(Memory.readPointer(pointer), returnType, fridaTypes);
+                return func(...params);
+            }
+        }
+    };
+}
+
 function makeWrapper(type, pointer, owned) {
     let staticType = type;
     if ("$kind" in type) { // an ObjC type
@@ -119,111 +227,10 @@ function makeWrapper(type, pointer, owned) {
 
     let wrapperObject = {};
     if (type.kind === "Function") {
-        wrapperObject = function(...argList) {
-            if (type.kind !== "Function")
-                throw TypeError("this value has a non-function type, so it cannot be called");
 
-            let flags = type.functionFlags;
-            if (argList.length < flags.numArguments) {
-                throw TypeError("missing arguments: " + flags.numArguments + " arguments required");
-            } else if (argList.length > flags.numArguments) {
-                throw TypeError("too many arguments: " + flags.numArguments + " arguments required");
-            }
 
-            if (flags.doesThrow) {
-                throw Error("calling a function that can throw is not yet supported"); // TODO
-            }
 
-            switch (flags.convention) {
-                case types.FunctionMetadataConvention.Swift:
-                    throw Error("calling Swift functions not yet supported");
-                case types.FunctionMetadataConvention.Block: {
-                    let block = new ObjC.Block(pointer);
-                    return block.implementation(...params);
-                }
-                case types.FunctionMetadataConvention.Thin:
-                    throw Error("calling thin functions not yet supported");
-                case types.FunctionMetadataConvention.CFunctionPointer: {
-                    let params = [];
-                    let fridaTypes = [];
-                    let argTypes = type.getArguments();
-
-                    function convertType(swiftType, swiftOrJSVal) {
-                        let fridaType, jsVal;
-                        jsVal = ("toJS" in argType) ? argType.toJS(swiftOrJSVal.$pointer) : swiftOrJSVal;
-                        switch (argType.toString()) {
-                            case "Builtin.Int8":
-                            case "Swift.Int8":
-                                fridaType = "int8";
-                                break;
-                            case "Builtin.UInt8":
-                            case "Swift.UInt8":
-                                fridaType = "uint8";
-                                break;
-                            case "Builtin.Int16":
-                            case "Swift.Int16":
-                                fridaType = "int16";
-                                break;
-                            case "Builtin.UInt16":
-                            case "Swift.UInt16":
-                                fridaType = "uint16";
-                                break;
-                            case "Builtin.Int32":
-                            case "Swift.Int32":
-                                fridaType = "int32";
-                                break;
-                            case "Builtin.UInt32":
-                            case "Swift.UInt32":
-                                fridaType = "uint32";
-                                break;
-                            case "Builtin.Int64":
-                            case "Swift.Int64":
-                                fridaType = "int64";
-                                break;
-                            case "Builtin.UInt64":
-                            case "Swift.UInt64":
-                                fridaType = "uint64";
-                                break;
-                            case "Swift.Double":
-                                fridaType = "double";
-                                break;
-                            case "Swift.Float":
-                                fridaType = "float";
-                                break;
-                            case "()":
-                                fridaType = "void";
-                                jsVal = undefined;
-                                break;
-                            default:
-                                if (argType.nominalType && argType.nominalType.mangledName === "_T0SP") {
-                                    fridaType = "pointer";
-                                    if (swiftOrJsVal instanceof NativePointer)
-                                        jsVal = swiftOrJsVal;
-                                    else if (jsVal !== undefined)
-                                        jsVal = Memory.readPointer(swiftOrJsVal.$pointer);
-                                } else {
-                                    throw Error("don't know how to convert a '" + argType.toString() + "' to a C value!");
-                                }
-                        }
-
-                        return { fridaType: fridaType, jsVal: jsVal };
-                    }
-
-                    for (let i = 0; i < flags.numArguments; i++) {
-                        let res = convertType(argTypes[i], argList[i]);
-                        if (res.jsVal === undefined && res.fridaType !== "void") {
-                            throw Error("argument " + i + " must not be undefined");
-                        }
-                        fridaTypes.push(res.fridaType);
-                        params.push(res.jsVal);
-                    }
-
-                    let returnType = convertType(type.returnType, undefined);
-                    let func = new NativeFunction(Memory.readPointer(pointer), returnType, fridaTypes);
-                    return func(...params);
-                }
-            }
-        };
+        wrapperObject = makeFunctionWrapper(type, pointer);
     } else if (isClassType(type)) {
         Object.defineProperties(wrapperObject, {
             '$isa': {
