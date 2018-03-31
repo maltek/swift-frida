@@ -110,7 +110,8 @@ function isClassType(t) {
     return t.kind === "Class" || (t.kind === "Existential" && t.getRepresentation() === "Class");
 }
 
-function makeWrapper(type, pointer) {
+function makeWrapper(type, pointer, owned) {
+    let staticType = type;
     if ("$kind" in type) { // an ObjC type
         console.log("making ObjC object");
         return ObjC.Object(Memory.readPointer(pointer));
@@ -224,25 +225,28 @@ function makeWrapper(type, pointer) {
             }
         };
     } else if (isClassType(type)) {
-        let object = Memory.readPointer(pointer);
         Object.defineProperties(wrapperObject, {
             '$isa': {
                 enumerable: true,
                 get() {
+                    let object = Memory.readPointer(pointer);
                     return Memory.readPointer(object.add(0));
                 },
             },
             '$retainCounts': {
                 enumerable: true,
                 get() {
+                    let object = Memory.readPointer(pointer);
                     return Swift._api.CFGetRetainCount(object);
                 },
             },
         });
+        let object = Memory.readPointer(pointer);
         let canonical = ObjC.api.object_getClass(object);
         type = Swift._typeFromCanonical(canonical);
     }
 
+    wrapperObject.$staticType = staticType;
     wrapperObject.$type = type;
     wrapperObject.$pointer = pointer;
 
@@ -303,13 +307,12 @@ function makeWrapper(type, pointer) {
 
                         let payload = Memory.alloc(payloadVwt.size.toInt32());
                         let address = curCase.indirect ? Swift._api.swift_projectBox(pointer) : pointer;
-                        console.log(`copying to ${payload} from ${pointer}`);
                         payloadVwt.initializeWithCopy(payload, pointer, curCase.type.canonicalType._ptr);
 
                         enumVwt.destructiveInjectEnumTag(pointer, curCase.tag, type.canonicalType._ptr);
 
-                        // TODO: document that user is responsible for freeing memory
-                        return makeWrapper(curCase.type, payload);
+                        // TODO: document that user needs to free this memory
+                        return makeWrapper(curCase.type, payload, true);
                     },
                 });
             }
@@ -318,17 +321,21 @@ function makeWrapper(type, pointer) {
 
     if ("fields" in type) {
         for (let field of type.fields()) {
-            let addr;
-            if (type.kind === "Struct") {
-                addr = pointer.add(field.offset);
-            } else { // Class
-                let object = Memory.readPointer(pointer);
-                addr = object.add(field.offset);
-            }
+            let getAddr = function getAddr() {
+                let addr;
+                if (type.kind === "Struct") {
+                    addr = pointer.add(field.offset);
+                } else { // Class
+                    let object = Memory.readPointer(pointer);
+                    addr = object.add(field.offset);
+                }
+                return addr;
+            };
 
             Object.defineProperty(wrapperObject, field.name, {
                 enumerable: true,
                 get() {
+                    let addr = getAddr();
                     let pointer = addr;
                     if (field.weak) {
                         let strong = Swift._api.swift_weakLoadStrong(addr);
@@ -349,7 +356,7 @@ function makeWrapper(type, pointer) {
                     return new field.type(pointer);
                 },
                 set(newVal) {
-                    let pointer = addr;
+                    let addr = getAddr();
                     if (field.weak) {
                         Swift._api.swift_weakAssign(addr, newVal.$pointer);
                     } else {
@@ -398,6 +405,32 @@ function makeWrapper(type, pointer) {
             cnt++;
         }
     }
+    let destroyWrapper = function() {
+            Object.keys(wrapperObject).forEach(key => Reflect.deleteProperty(wrapperObject, key));
+            pointer = undefined;
+            type = undefined;
+    };
+    if (owned) {
+        wrapperObject.$destroy = function() {
+            type.canonicalType.valueWitnessTable.destroy(pointer, type.canonicalType._ptr);
+            destroyWrapper();
+        };
+    }
+    wrapperObject.$assignWithCopy = function(val) {
+        if ("$kind" in val) { // ObjC type
+            throw Error("ObjC types not yet supported");
+        } else if ("fromJS" in type) {
+            type.fromJS(pointer, val);
+            return this;
+        } else {
+            staticType.canonicalType.valueWitnessTable.assignWithCopy(pointer, val.$pointer, staticType.canonicalType);
+            let newWrapper = makeWrapper(pointer, val.$type);
+            destroyWrapper();
+            return newWrapper;
+        }
+    };
+
+    Object.preventExtensions(wrapperObject);
 
     return wrapperObject;
 }
