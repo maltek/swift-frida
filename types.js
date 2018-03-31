@@ -206,13 +206,8 @@ ValueWitnessTable.prototype = Object.create(TypeLayout.prototype, {
         enumerable: true,
     },
     isValueInline: {
-        value: function(size, alignment) {
-            if (size !== undefined && alignment !== undefined)
-                return (size <= 3 * Process.pointerSize && alignment <= Process.pointerSize);
-            else if (size !== undefined)
-                throw new Error("no overload with 1 argument");
-            else
-                return !this.flags.IsNonInline;
+        get() {
+            return !this.flags.IsNonInline;
         },
         enumerable: true,
     },
@@ -1404,24 +1399,37 @@ function OpaqueExistentialContainer(pointer) {
 }
 OpaqueExistentialContainer.prototype = {
     // offset 0
-    get fixedSizeBuffer() {
-        return [
-            Memory.readPointer(this._ptr.add(0)),
-            Memory.readPointer(this._ptr.add(Process.pointerSize)),
-            Memory.readPointer(this._ptr.add(2*Process.pointerSize)),
-        ];
+    get fixedSizeBuffer0() {
+        return Memory.readPointer(this._ptr.add(0));
+    },
+    set fixedSizeBuffer0(value) {
+        Memory.writePointer(this._ptr.add(0), value);
     },
     // class types have a pointer in the fixedSizeBuffer
     get heapObject() {
-        return new HeapObject(this.fixedSizeBuffer[0]);
+        return new HeapObject(this.fixedSizeBuffer0);
+    },
+    // offset 1*pointerSize
+    get fixedSizeBuffer1() {
+        return Memory.readPointer(this._ptr.add(Process.pointerSize));
+    },
+    // offset 2*pointerSize
+    get fixedSizeBuffer2() {
+        return Memory.readPointer(this._ptr.add(2*Process.pointerSize));
     },
     // offset 3*pointerSize
     get type() {
         return new TargetMetadata(Memory.readPointer(this._ptr.add(3*Process.pointerSize)));
     },
+    set type(value) {
+        Memory.writePointer(this._ptr.add(3*Process.pointerSize), value._ptr);
+    },
     // offset 4*pointerSize
     getWitnessTable(index) {
         return Memory.readPointer(this._ptr.add((4 + index) * Process.pointerSize));
+    },
+    setWitnessTable(index, val) {
+        return Memory.writePointer(this._ptr.add((4 + index) * Process.pointerSize), val);
     },
 };
 function ClassExistentialContainer(pointer) {

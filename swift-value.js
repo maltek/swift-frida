@@ -32,7 +32,7 @@ function swiftToString(obj) {
         let vwt = opaque.type.valueWitnessTable;
         if (vwt.flags.IsNonInline) {
             let _swift_release_ = new NativeFunction(Memory.readPointer(Swift._api._swift_release), 'void', ['pointer']);
-            _swift_release_(opaque.fixedSizeBuffer[0]);
+            _swift_release_(opaque.fixedSizeBuffer0);
         } else {
             let destroy = vwt.destroy;
             destroy(pointer, type._ptr);
