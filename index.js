@@ -635,6 +635,7 @@ Swift = module.exports = {
                     'swift_weakLoadStrong': ['pointer', ['pointer']],
                     'swift_weakAssign': ['void', ['pointer', 'pointer']],
                     'swift_release': ['void', ['pointer']],
+                    'swift_retain': ['void', ['pointer']],
 
                     //'swift_allocObject': ['pointer', ['pointer', size_t, size_t]],
                     //'swift_allocBox': [['pointer', 'pointer'], ['pointer']],

@@ -387,15 +387,45 @@ function makeWrapper(type, pointer, owned) {
         }
     }
 
-    if (type.kind === "Existential") {
-        Object.defineProperty(wrapperObject, '$wrappedType', {
+    if (type.kind === "Existential" && type.getRepresentation() === "Opaque") {
+        Object.defineProperty(wrapperObject, '$value', {
             enumerable: true,
             get() {
-                if (type.getRepresentation() === "Opaque") {
-                    let cont = new types.OpaqueExistentialContainer(pointer);
-                    return cont.$type;
+                let cont = new types.OpaqueExistentialContainer(pointer);
+                let dynType = Swift._typeFromCanonical(cont.$type);
+                if (isClassType(dynType) || !dynType.canonicalType.valueWitnessTable.isValueInline) {
+                    return makeWrapper(pointer, dynType);
+                } else {
+                    return makeWrapper(cont.heapObject, dynType);
                 }
-                throw Error("not yet implemented");
+            },
+            set(newVal) {
+                let witnesses = [];
+                let protocols = staticType.canonicalType.protocols.protocols;
+                for (let i = 0; i < protocols.length; i++) {
+                    let proto = protocols[i];
+                    let conformance = Swift._api.swift_conformsToProtocol(newVal.$type.canonicalType._ptr, proto._ptr);
+                    if (conformance.isNull())
+                        throw new Error(`this value does not implement the required protocol '${proto.name}'`);
+                    witnesses.push(conformance);
+                }
+
+                let cont = new types.OpaqueExistentialContainer(pointer);
+                let oldVwt = cont.type.canonicalType.valueWitnessTable;
+                // TODO: support ObjC values
+                if (isClassType(cont.type))
+                    Swift._api.swift_release(cont.heapObject);
+                else if(oldVwt.isValueInline)
+                    oldVwt.destroy(pointer);
+                else
+                    oldVwt.destroy(cont.heapObject);
+
+                let newVwt = newVal.$type.canonicalType.valueWitnessTable;
+                newVwt.initializeBufferWithCopy(pointer, newVal.$pointer, newVal.$type.canonicalType._ptr);
+                cont.type = newVal.$type;
+                for (let i = 0; i < witnesses.length; i++) {
+                    cont.setWitnessTable(i, witnesses[i]);
+                }
             },
         });
     }
