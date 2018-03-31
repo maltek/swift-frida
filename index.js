@@ -18,27 +18,6 @@ function strlen(pointer) {
 
 let _api = null;
 
-// takes the JS string `str` and copies it to the NativePointer or args-like array of NativePointers in `dest`
-// Untested, so it must be broken in a bunch of ways.
-function jsStringToSwift(str, dest) {
-    let cStr = Memory.allocUtf8String(val);
-    const sizeOfString = Process.pointerSize * 3;
-
-    let swiftStr;
-    if (data instanceof NativePointer) {
-        swiftStr = data;
-    } else {
-        swiftStr = Memory.alloc(sizeOfString);
-    }
-    api.swift_stringFromUTF8InRawMemory(swiftStr, cStr, val.length);
-
-    if (!(data instanceof NativePointer)) {
-        dest[0] = Memory.readPointer(swiftStr);
-        dest[1] = Memory.readPointer(swiftStr.add(Process.pointerSize));
-        dest[2] = Memory.readPointer(swiftStr.add(Process.pointerSize * 2));
-    }
-}
-
 const typesByCanonical = new Map();
 
 function Type(nominalType, canonicalType, name, accessFunction) {
@@ -175,6 +154,13 @@ function Type(nominalType, canonicalType, name, accessFunction) {
     }
     if (canonicalType) {
         switch (this.toString()) {
+            case "Swift.String":
+                this.fromJS = function (address, value) {
+                    canonicalType.valueWitnessTable.destroy(address, canonicalType._ptr);
+                    let cStr = Memory.allocUtf8String(value);
+                    api.swift_stringFromUTF8InRawMemory(address, cStr, value.length);
+                    return true;
+                };
             case "Swift.Bool":
                 this.toJS = function (address) { return Memory.readU8(address) !== 0; };
                 this.fromJS = function (address, value) { Memory.writeU8(address, value ? 1 : 0); return true; };

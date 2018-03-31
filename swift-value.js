@@ -465,7 +465,7 @@ function makeWrapper(type, pointer, owned) {
     wrapperObject.$assignWithCopy = function(val) {
         if ("$kind" in val) { // ObjC type
             throw Error("ObjC types not yet supported"); // TODO
-        } else if ("fromJS" in type) {
+        } else if ("fromJS" in type && !("$pointer" in val)) {
             type.fromJS(pointer, val);
             return this;
         } else {
