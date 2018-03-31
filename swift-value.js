@@ -51,7 +51,7 @@ function swiftToString(obj) {
         dynamicType = Swift._api.swift_getDynamicType(pointer, type.canonicalType._ptr, 1);
         copyFn = type.canonicalType.valueWitnessTable.initializeBufferWithCopyOfBuffer;
     } else {
-        dynamicType = ("$isaClass" in obj ? obj.$isaClass : type).canonicalType._ptr;
+        dynamicType = type.canonicalType._ptr;
         copyFn = type.canonicalType.valueWitnessTable.initializeBufferWithCopy;
     }
     copyFn(copy, pointer, dynamicType);
@@ -111,6 +111,11 @@ function isClassType(t) {
 }
 
 function makeWrapper(type, pointer) {
+    if ("$kind" in type) { // an ObjC type
+        console.log("making ObjC object");
+        return ObjC.Object(Memory.readPointer(pointer));
+    }
+
     let wrapperObject = {};
     if (type.kind === "Function") {
         wrapperObject = function(...argList) {
@@ -264,7 +269,7 @@ function makeWrapper(type, pointer) {
         };
     } else if (isClassType(type)) {
         let object = Memory.readPointer(pointer);
-        Object.defineProperties(object, {
+        Object.defineProperties(wrapperObject, {
             '$isa': {
                 enumerable: true,
                 get() {
@@ -341,6 +346,7 @@ function makeWrapper(type, pointer) {
             Object.defineProperty(wrapperObject, field.name, {
                 enumerable: true,
                 get() {
+                    let pointer = addr;
                     if (field.weak) {
                         let strong = Swift._api.swift_weakLoadStrong(addr);
                         if (strong.isNull())
@@ -349,15 +355,28 @@ function makeWrapper(type, pointer) {
                         // If the user wants to keep this alive longer than right now, they need to manually increase
                         // the reference count for such a variable for anything else, too.
                         Swift._api.swift_release(strong);
-                        addr = strong;
+                        pointer = strong;
                     }
 
                     if ("toJS" in field.type) {
-                        let val = field.type.toJS(addr);
+                        let val = field.type.toJS(pointer);
                         if (val !== undefined)
                             return val;
                     }
-                    return new field.type(addr);
+                    return new field.type(pointer);
+                },
+                set(newVal) {
+                    let pointer = addr;
+                    if (field.weak) {
+                        Swift._api.swift_weakAssign(addr, newVal.$pointer);
+                    } else {
+                        let assigned = false;
+                        if ("fromJS" in field.type && !("$pointer" in newVal))
+                            assigned = field.type.fromJS(pointer, newVal);
+                        if (!assigned) {
+                            type.valueWitnessTable.assignWithCopy(addr, newVal.$pointer, newVal.$type.canonicalType._ptr);
+                        }
+                    }
                 },
             });
         }

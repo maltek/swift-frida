@@ -113,73 +113,73 @@ function Type(nominalType, canonicalType, name, accessFunction) {
             return new Type(this.nominalType, new types.TargetMetadata(canonical), name);
         };
     }
-    if (this.nominalType && canonicalType) {
-        if (this.kind === "Enum") {
-            this.enumCases = function enumCases() {
-                let info = this.nominalType.enum_;
-                let count = info.getNumCases();
-                let payloadCount = info.getNumPayloadCases();
-                let cases = [];
-                let names = info.caseNames;
-                let caseTypeAccessor = new NativeFunction(info.getCaseTypes, 'pointer', ['pointer']);
-                let caseTypes = caseTypeAccessor(canonicalType._ptr);
-                for (let i = 0; i < count; i++) {
-                    let type = null;
-                    let typeFlags = 0;
-                    if (i < payloadCount) {
-                        type = Memory.readPointer(caseTypes.add(i * Process.pointerSize));
-                        typeFlags = type.and(types.FieldTypeFlags.typeMask);
-                        type = new types.TargetMetadata(type.and(~types.FieldTypeFlags.typeMask));
-                    }
-                    cases.push({
-                        name: Memory.readUtf8String(names),
-                        type: type === null ? null : new Type(null, type),
-                        indirect: (typeFlags & types.FieldTypeFlags.Indirect) === types.FieldTypeFlags.Indirect,
+    if (this.nominalType && canonicalType && this.kind === "Enum") {
+        this.enumCases = function enumCases() {
+            let info = this.nominalType.enum_;
+            let count = info.getNumCases();
+            let payloadCount = info.getNumPayloadCases();
+            let cases = [];
+            let names = info.caseNames;
+            let caseTypeAccessor = new NativeFunction(info.getCaseTypes, 'pointer', ['pointer']);
+            let caseTypes = caseTypeAccessor(canonicalType._ptr);
+            for (let i = 0; i < count; i++) {
+                let type = null;
+                let typeFlags = 0;
+                if (i < payloadCount) {
+                    type = Memory.readPointer(caseTypes.add(i * Process.pointerSize));
+                    typeFlags = type.and(types.FieldTypeFlags.typeMask);
+                    type = new types.TargetMetadata(type.and(~types.FieldTypeFlags.typeMask));
+                }
+                cases.push({
+                    name: Memory.readUtf8String(names),
+                    type: type === null ? null : new Type(null, type),
+                    indirect: (typeFlags & types.FieldTypeFlags.Indirect) === types.FieldTypeFlags.Indirect,
+                    weak: (typeFlags & types.FieldTypeFlags.Weak) === types.FieldTypeFlags.Weak,
+                });
+                names = names.add(strlen(names) + 1);
+            }
+            return cases;
+        };
+    }
+    if (["Class", "Struct"].indexOf(this.kind) !== -1 && canonicalType) {
+        this.fields = function fields() {
+            let results = [];
+            let hierarchy = [canonicalType];
+            while (hierarchy[hierarchy.length - 1].superClass) {
+                hierarchy.push(hierarchy[hierarchy.length - 1].superClass);
+            }
+            let offset = ptr(0);
+            for (let i = hierarchy.length; i--;) {
+                let canon = hierarchy[i];
+                let nomin = (["Class", "Struct"].indexOf(canon.kind) != -1) ? canon.getNominalTypeDescriptor() : null;
+                if (!nomin)
+                    continue;
+                let info = (nomin.getKind() === "Class") ? nomin.clas : nomin.struct;
+                if (!info.hasFieldOffsetVector())
+                    throw Error("fields without offset vector not implemented");
+
+                let fieldTypeAccessor = new NativeFunction(info.getFieldTypes, 'pointer', ['pointer']);
+                let fieldTypes = fieldTypeAccessor(canon._ptr);
+
+                let fieldName = info.fieldNames;
+                let fieldOffsets = canon._ptr.add(info.fieldOffsetVectorOffset * Process.pointerSize);
+                for (let j = 0; j < info.numFields; j++) {
+                    let type = Memory.readPointer(fieldTypes.add(j * Process.pointerSize));
+                    let typeFlags = type.and(types.FieldTypeFlags.typeMask);
+                    type = new types.TargetMetadata(type.and(~types.FieldTypeFlags.typeMask));
+                    let curOffset = Memory.readPointer(fieldOffsets.add(j * Process.pointerSize));
+
+                    results.push({
+                        name: Memory.readUtf8String(fieldName),
+                        offset: offset.add(curOffset),
+                        type: new Type(null, type, "?Unknown type of " +  this.toString()),
                         weak: (typeFlags & types.FieldTypeFlags.Weak) === types.FieldTypeFlags.Weak,
                     });
-                    names = names.add(strlen(names) + 1);
+                    fieldName = fieldName.add(strlen(fieldName) + 1);
                 }
-                return cases;
-            };
-        }
-        if (["Class", "Struct"].indexOf(this.nominalType.getKind()) !== -1 && canonicalType) {
-            this.fields = function fields() {
-                let results = [];
-                let hierarchy = [canonicalType];
-                while (hierarchy[hierarchy.length - 1].superClass) {
-                    hierarchy.push(hierarchy[hierarchy.length - 1].superClass);
-                }
-                for (let i = hierarchy.length; i--;) {
-                    let canon = hierarchy[i];
-                    let nomin = (["Class", "Struct"].indexOf(canon.kind) != -1) ? canon.getNominalTypeDescriptor() : null;
-                    if (!nomin)
-                        continue;
-                    let info = (nomin.getKind() === "Class") ? nomin.clas : nomin.struct;
-                    if (!info.hasFieldOffsetVector())
-                        throw Error("fields without offset vector not implemented");
-
-                    let fieldTypeAccessor = new NativeFunction(info.getFieldTypes, 'pointer', ['pointer']);
-                    let fieldTypes = fieldTypeAccessor(canon._ptr);
-
-                    let fieldName = info.fieldNames;
-                    let fieldOffsets = canon._ptr.add(info.fieldOffsetVectorOffset * Process.pointerSize);
-                    for (let j = 0; j < info.numFields; j++) {
-                        let type = Memory.readPointer(fieldTypes.add(j * Process.pointerSize));
-                        let typeFlags = type.and(types.FieldTypeFlags.typeMask);
-                        type = new types.TargetMetadata(type.and(~types.FieldTypeFlags.typeMask));
-
-                        results.push({
-                            name: Memory.readUtf8String(fieldName),
-                            offset: Memory.readPointer(fieldOffsets.add(j * Process.pointerSize)),
-                            type: new Type(null, type, "?Unknown type of " +  this.toString()),
-                            weak: (typeFlags & types.FieldTypeFlags.Weak) === types.FieldTypeFlags.Weak,
-                        });
-                        fieldName = fieldName.add(strlen(fieldName) + 1);
-                    }
-                }
-                return results;
-            };
-        }
+            }
+            return results;
+        };
     }
     if (canonicalType) {
         switch (this.toString()) {
