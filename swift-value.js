@@ -338,8 +338,16 @@ function makeWrapper(type, pointer, owned) {
                 }
                 return addr;
             };
+            let fieldName = field.name;
+            if (fieldName.startsWith("$"))
+                fieldName = "$" + fieldName;
+            while (fieldName in wrapperObject) {
+                if (!fieldName.startsWith("$"))
+                    fieldName = "$" + fieldName;
+                fieldName = "$" + fieldName;
+            }
 
-            Object.defineProperty(wrapperObject, field.name, {
+            Object.defineProperty(wrapperObject, fieldName, {
                 enumerable: true,
                 get() {
                     let addr = getAddr();
