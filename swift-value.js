@@ -149,89 +149,45 @@ function makeWrapper(type, pointer) {
 
                     function convertType(swiftType, swiftOrJSVal) {
                         let fridaType, jsVal;
-                        if ("toJS" in argType) {
-                            jsVal = argType.toJS(swiftOrJSVal.$pointer);
-                        }
+                        jsVal = ("toJS" in argType) ? argType.toJS(swiftOrJSVal.$pointer) : swiftOrJSVal;
                         switch (argType.toString()) {
+                            case "Builtin.Int8":
                             case "Swift.Int8":
                                 fridaType = "int8";
-                                if (typeof swiftOrJSVal === "number") {
-                                    jsVal = swiftOrJSVal;
-                                } else if (jsVal !== undefined) {
-                                    jsVal = Memory.readS8();
-                                }
                                 break;
+                            case "Builtin.UInt8":
                             case "Swift.UInt8":
                                 fridaType = "uint8";
-                                if (typeof swiftOrJSVal === "number") {
-                                    jsVal = swiftOrJSVal;
-                                } else if (jsVal !== undefined) {
-                                    jsVal = Memory.readU8(swiftOrJSVal.$pointer);
-                                }
                                 break;
+                            case "Builtin.Int16":
                             case "Swift.Int16":
                                 fridaType = "int16";
-                                if (typeof swiftOrJSVal === "number") {
-                                    jsVal = swiftOrJSVal;
-                                } else if (jsVal !== undefined) {
-                                    jsVal = Memory.readS16(swiftOrJSVal.$pointer);
-                                }
                                 break;
+                            case "Builtin.UInt16":
                             case "Swift.UInt16":
                                 fridaType = "uint16";
-                                if (typeof swiftOrJSVal === "number") {
-                                    jsVal = swiftOrJSVal;
-                                } else if (jsVal !== undefined) {
-                                    jsVal = Memory.readU16(swiftOrJSVal.$pointer);
-                                }
                                 break;
+                            case "Builtin.Int32":
                             case "Swift.Int32":
                                 fridaType = "int32";
-                                if (typeof swiftOrJSVal === "number") {
-                                    jsVal = swiftOrJSVal;
-                                } else if (jsVal !== undefined) {
-                                    jsVal = Memory.readS32(swiftOrJSVal.$pointer);
-                                }
                                 break;
+                            case "Builtin.UInt32":
                             case "Swift.UInt32":
                                 fridaType = "uint32";
-                                if (typeof swiftOrJSVal === "number") {
-                                    jsVal = swiftOrJSVal;
-                                } else if (jsVal !== undefined) {
-                                    jsVal = Memory.readU32(swiftOrJSVal.$pointer);
-                                }
                                 break;
+                            case "Builtin.Int64":
                             case "Swift.Int64":
                                 fridaType = "int64";
-                                if (swiftOrJSVal instanceof Int64) {
-                                    jsVal = swiftOrJSVal;
-                                } else if (jsVal !== undefined) {
-                                    jsVal = Memory.readS64(swiftOrJSVal.$pointer);
-                                }
                                 break;
+                            case "Builtin.UInt64":
                             case "Swift.UInt64":
                                 fridaType = "uint64";
-                                if (swiftOrJSVal instanceof UInt64) {
-                                    jsVal = swiftOrJSVal;
-                                } else if (jsVal !== undefined) {
-                                    jsVal = Memory.readU64(swiftOrJSVal.$pointer);
-                                }
                                 break;
                             case "Swift.Double":
                                 fridaType = "double";
-                                if (typeof swiftOrJSVal === "number") {
-                                    jsVal = swiftOrJSVal;
-                                } else if (jsVal !== undefined) {
-                                    jsVal = Memory.readDouble(swiftOrJSVal.$pointer);
-                                }
                                 break;
                             case "Swift.Float":
                                 fridaType = "float";
-                                if (typeof swiftOrJSVal === "number") {
-                                    jsVal = swiftOrJSVal;
-                                } else if (jsVal !== undefined) {
-                                    jsVal = Memory.readFloat(swiftOrJSVal.$pointer);
-                                }
                                 break;
                             case "()":
                                 fridaType = "void";
@@ -295,12 +251,12 @@ function makeWrapper(type, pointer) {
     if ('enumCases' in type) {
         let enumCases = type.enumCases();
         if (enumCases.length === 1) {
-            wrapperObject.$enumCase = enumCases[0].name;
+            wrapperObject.$enumCase = 0;
         } else if (enumCases.length !== 0) {
+            let numPayloads = type.nominalType.enum_.getNumPayloadCases();
             Object.defineProperty(wrapperObject, '$enumCase', {
                 enumerable: true,
                 get() {
-                    let numPayloads = type.nominalType.enum_.getNumPayloadCases();
                     let tag;
                     if (numPayloads === 0) {
                         // a C-like enum: an integer just large enough to represent all cases
@@ -317,7 +273,8 @@ function makeWrapper(type, pointer) {
                     } else if (numPayloads === 1) {
                         // single-payload enum: tag is after the value, or in spare bits if available
                         let opaqueVal = pointer;
-                        tag = Swift._api.swift_getEnumCaseSinglePayload(opaqueVal, enumCases[0].type, enumCases.length);
+                        let payloadType = enumCases[0].type.canonicalType._ptr;
+                        tag = Swift._api.swift_getEnumCaseSinglePayload(opaqueVal, payloadType, enumCases.length - numPayloads);
                     } else {
                         // multi-payload enum:
                         // - all non-payload cases are collapsed into a single tag, secondary tag to
@@ -327,9 +284,35 @@ function makeWrapper(type, pointer) {
                         let opaqueVal = pointer;
                         tag = Swift._api.swift_getEnumCaseMultiPayload(opaqueVal, type.nominalType._ptr);
                     }
-                    return enumCases[tag];
+                    // tag is in range [-ElementsWithPayload..ElementsWithNoPayload-1]
+                    // but we want an index into the array returned by enumCases()
+                    return tag + numPayloads;
                 },
             });
+            if (numPayloads > 0) {
+                Object.defineProperty(wrapperObject, '$enumPayloadCopy', {
+                    enumerable: true,
+                    value() {
+                        let curCase = enumCases[this.$enumCase];
+                        if (curCase.type === null)
+                            return undefined;
+
+                        let enumVwt = type.canonicalType.valueWitnessTable;
+                        let payloadVwt = curCase.type.canonicalType.valueWitnessTable;
+                        enumVwt.destructiveProjectEnumData(pointer, type.canonicalType._ptr);
+
+                        let payload = Memory.alloc(payloadVwt.size.toInt32());
+                        let address = curCase.indirect ? Swift._api.swift_projectBox(pointer) : pointer;
+                        console.log(`copying to ${payload} from ${pointer}`);
+                        payloadVwt.initializeWithCopy(payload, pointer, curCase.type.canonicalType._ptr);
+
+                        enumVwt.destructiveInjectEnumTag(pointer, curCase.tag, type.canonicalType._ptr);
+
+                        // TODO: document that user is responsible for freeing memory
+                        return makeWrapper(curCase.type, payload);
+                    },
+                });
+            }
         }
     }
 

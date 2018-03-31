@@ -113,7 +113,7 @@ function Type(nominalType, canonicalType, name, accessFunction) {
             return new Type(this.nominalType, new types.TargetMetadata(canonical), name);
         };
     }
-    if (this.nominalType && canonicalType && this.kind === "Enum") {
+    if (this.nominalType && canonicalType && (this.kind === "Enum" || this.kind === "Optional")) {
         this.enumCases = function enumCases() {
             let info = this.nominalType.enum_;
             let count = info.getNumCases();
@@ -131,6 +131,7 @@ function Type(nominalType, canonicalType, name, accessFunction) {
                     type = new types.TargetMetadata(type.and(~types.FieldTypeFlags.typeMask));
                 }
                 cases.push({
+                    tag: i - payloadCount,
                     name: Memory.readUtf8String(names),
                     type: type === null ? null : new Type(null, type),
                     indirect: (typeFlags & types.FieldTypeFlags.Indirect) === types.FieldTypeFlags.Indirect,
@@ -647,6 +648,7 @@ Swift = module.exports = {
                     //'swift_allocObject': ['pointer', ['pointer', size_t, size_t]],
                     //'swift_allocBox': [['pointer', 'pointer'], ['pointer']],
                     //'swift_deallocBox': ['void', ['pointer']],
+                    'swift_projectBox': ['pointer', ['pointer']],
                     'swift_stringFromUTF8InRawMemory': ['void', ['pointer', 'pointer', size_t]],
 
                     "swift_getTupleTypeMetadata": ['pointer', [size_t, 'pointer', 'pointer', 'pointer']],
