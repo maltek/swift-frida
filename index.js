@@ -351,11 +351,16 @@ Type.prototype = {
     },
 
     toString() {
+        if ("_name" in this)
+            return this._name;
+
         if (this.canonicalType) {
             let [pointer, len] = _api.swift_getTypeName(this.canonicalType._ptr, /* qualified? */ 1);
             let str = Memory.readUtf8String(pointer, len.toInt32());
-            if (str.length !== 0 && str !== "<<< invalid type >>>")
+            if (str.length !== 0 && str !== "<<< invalid type >>>") {
+                this._name = str;
                 return str;
+            }
         }
 
         if (this.nominalType) {
@@ -375,11 +380,15 @@ Type.prototype = {
                 }
                 name +=  "<" + params.join(", ") + ">";
             }
+            this._name = name;
             return name;
         }
 
-        if (this.fixedName)
+        if (this.fixedName) {
+            this._name = this.fixedName;
             return this.fixedName;
+        }
+        this._name = "<<< invalid type >>>";
         return "<<< invalid type >>>";
         //throw Error(`cannot get string representation for type without nominal or canonical type information`);
     },
