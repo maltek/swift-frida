@@ -466,9 +466,20 @@ function findAllTypes(api) {
     }
 
     if (!typesByName.has("Any")) {
-        let Any = _api.swift_getExistentialTypeMetadata(1, ptr(0), 0, ptr(0));
+        let Any = _api.swift_getExistentialTypeMetadata(/*Any*/ 1, /*superClass*/ ptr(0), /*numProtocols*/ 0, /*protcols*/ ptr(0));
         Any = new Type(null, new types.TargetMetadata(Any), "Any");
         typesByName.set("Any", Any);
+    }
+    if (!typesByName.has("Swift.AnyObject")) {
+        let AnyObject = _api.swift_getExistentialTypeMetadata(/*Class*/ 0, /*superClass*/ ptr(0), /*numProtocols*/ 0, /*protcols*/ ptr(0));
+        AnyObject = new Type(null, new types.TargetMetadata(AnyObject), "Swift.AnyObject");
+        typesByName.set("Swift.AnyObject", AnyObject);
+    }
+    if (!typesByName.has("Swift.AnyObject.Type")) {
+        let AnyObject = typesByName.get("Swift.AnyObject");
+        let AnyClass = AnyObject.Type;
+        typesByName.set("Swift.AnyObject.Type", AnyClass);
+        typesByName.set("Swift.AnyClass", AnyClass);
     }
 
     return typesByName;
