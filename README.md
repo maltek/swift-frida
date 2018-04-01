@@ -40,13 +40,13 @@ Right now, the following functions are available in the `Swift` namespace, when 
 
     Kind               | available property
     -------------------|---------------------------------------------------------------------------------------------------------------
-                       | `toString()` returns a string with the debug representation of this variable
-                       | `$pointer` the pointer where this value resides in memory
-                       | `$type` the dynamic type of this value
-                       | `$staticType` the static type of this value
-                       | `$destroy()` destroys an owned Swift value. (On a best-effort basis this also happens when the object is garbage-collected.)
-                       | `$assignWithCopy(other)` assigns a copy of `other` to this variable. `other` must have a compatible type (this is not checked).
-                       | `allocCopy()` creates and returns an owned copy of this value. Use `$destroy()` on the return value when you are done using it!
+    \*                  | `toString()` returns a string with the debug representation of this variable
+    \*                 | `$pointer` the pointer where this value resides in memory
+    \*                 | `$type` the dynamic type of this value
+    \*                 | `$staticType` the static type of this value
+    \*                 | `$destroy()` destroys an owned Swift value. (On a best-effort basis this also happens when the object is garbage-collected.)
+    \*                 | `$assignWithCopy(other)` assigns a copy of `other` to this variable. `other` must have a compatible type (this is not checked).
+    \*                 | `allocCopy()` creates and returns an owned copy of this value. Use `$destroy()` on the return value when you are done using it!
     Function           | The object is a function that you can call. (Other properties are still available.)
     ObjCClassWrapper   | The object is an `ObjC.Object`. See the documentation there. (None of the properties for Swift values are available.)
     Class, Existential | `$isa` the isa pointer. (Only for Existential types when they are class bound.)
