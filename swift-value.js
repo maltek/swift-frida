@@ -218,6 +218,17 @@ function makeFunctionWrapper(type, pointer) {
     };
 }
 
+function escapeName(name, obj) {
+    if (name.startsWith("$"))
+        name = "$" + name;
+    while (name in obj) {
+        if (!name.startsWith("$"))
+            name = "$" + name;
+        name = "$" + name;
+    }
+    return obj;
+}
+
 function makeWrapper(type, pointer, owned) {
     if (!pointer || pointer.isNull()) {
         throw new Error("value can't be located at NULL");
@@ -340,14 +351,7 @@ function makeWrapper(type, pointer, owned) {
                 }
                 return addr;
             };
-            let fieldName = field.name;
-            if (fieldName.startsWith("$"))
-                fieldName = "$" + fieldName;
-            while (fieldName in wrapperObject) {
-                if (!fieldName.startsWith("$"))
-                    fieldName = "$" + fieldName;
-                fieldName = "$" + fieldName;
-            }
+            let fieldName = escapeName(field.name, wrapperObject);
 
             Object.defineProperty(wrapperObject, fieldName, {
                 enumerable: true,
@@ -435,20 +439,27 @@ function makeWrapper(type, pointer, owned) {
     if ("tupleElements" in type) {
         let cnt = 0;
         for (let elem of type.tupleElements()) {
-            let label = elem.label;
-            let curCnt = cnt;
-            if (label !== null) {
-                Object.defineProperty(wrapperObject, label, {
-                    enumerable: true,
-                    get() { return wrapperObject[curCnt]; },
-                });
-            }
             Object.defineProperty(wrapperObject, cnt.toString(), {
                 enumerable: true,
                 get() {
                     return elem.type(pointer.add(elem.offset));
                 },
+                set(val) {
+                    wrapperObject[curCnt].$assignWithCopy(val);
+                },
             });
+            cnt++;
+        }
+        cnt = 0;
+        for (let elem of type.tupleElements()) {
+            let curCnt = cnt;
+            if (elem.label !== null) {
+                Object.defineProperty(wrapperObject, escapeName(elem.label, wrapperObject), {
+                    enumerable: true,
+                    get() { return wrapperObject[curCnt]; },
+                    set(val) { wrapperObject[curCnt] = val; },
+                });
+            }
             cnt++;
         }
     }
