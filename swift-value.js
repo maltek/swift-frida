@@ -219,9 +219,12 @@ function makeFunctionWrapper(type, pointer) {
 }
 
 function makeWrapper(type, pointer, owned) {
+    if (!pointer || pointer.isNull()) {
+        throw new Error("value can't be located at NULL");
+    }
+
     let staticType = type;
     if ("$kind" in type) { // an ObjC type
-        console.log("making ObjC object");
         return ObjC.Object(Memory.readPointer(pointer));
     }
 
