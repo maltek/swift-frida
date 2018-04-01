@@ -102,12 +102,12 @@ function Type(nominalType, canonicalType, name, accessFunction) {
                 }
                 cases.push({
                     tag: i - payloadCount,
-                    name: Memory.readUtf8String(names),
+                    name: names === null ? null : Memory.readUtf8String(names),
                     type: type === null ? null : new Type(null, type),
                     indirect: (typeFlags & types.FieldTypeFlags.Indirect) === types.FieldTypeFlags.Indirect,
                     weak: (typeFlags & types.FieldTypeFlags.Weak) === types.FieldTypeFlags.Weak,
                 });
-                names = names.add(strlen(names) + 1);
+                names = names === null ? null : names.add(strlen(names) + 1);
             }
             return cases;
         };
