@@ -321,7 +321,6 @@ function makeWrapper(type, pointer, owned) {
 
                         enumVwt.destructiveInjectEnumTag(pointer, curCase.tag, type.canonicalType._ptr);
 
-                        // TODO: document that user needs to free this memory
                         return makeWrapper(curCase.type, payload, true);
                     },
                 });
@@ -454,30 +453,51 @@ function makeWrapper(type, pointer, owned) {
         }
     }
 
-    let destroyWrapper = function() {
-            Object.keys(wrapperObject).forEach(key => Reflect.deleteProperty(wrapperObject, key));
-            pointer = undefined;
-            type = undefined;
+    let invalidateWrapper = function() {
+        Object.keys(wrapperObject).forEach(key => Reflect.deleteProperty(wrapperObject, key));
+        pointer = undefined;
+        type = undefined;
     };
     if (owned) {
         wrapperObject.$destroy = function() {
-            type.canonicalType.valueWitnessTable.destroy(pointer, type.canonicalType._ptr);
-            destroyWrapper();
+            type.canonicalType.valueWitnessTable._destroy(pointer, type.canonicalType._ptr);
+            invalidateWrapper();
         };
+        let destruct = function() {
+            try {
+                if (pointer !== undefined)
+                    wrapperObject.$destroy();
+            } catch (e) {
+                console.log(`unhandled error while cleaning up owned Swift value: ${e}`);
+            }
+        };
+        let oldFin = Duktape.fin(pointer);
+        Duktape.fin(pointer, function(obj, heapDestruction) {
+            // not calling destructor during heap destruction -- variables we require for this may already be gone
+            if (!heapDestruction)
+                destruct();
+            oldFin(obj, heapDestruction);
+        });
     }
     wrapperObject.$assignWithCopy = function(val) {
         if ("$kind" in val) { // ObjC type
-            throw Error("ObjC types not yet supported"); // TODO
+            throw new Error("ObjC types not yet supported"); // TODO
         } else if ("fromJS" in type && !("$pointer" in val)) {
             type.fromJS(pointer, val);
             return this;
         } else {
             // TODO: check that types are compatible
             staticType.canonicalType.valueWitnessTable.assignWithCopy(pointer, val.$pointer, staticType.canonicalType._ptr);
-            let newWrapper = makeWrapper(pointer, val.$type, owned);
-            destroyWrapper();
+            let newWrapper = makeWrapper(val.$type, pointer, owned);
+            invalidateWrapper();
             return newWrapper;
         }
+    };
+    wrapperObject.$allocCopy = function() {
+        let vwt = type.canonicalType.valueWitnessTable;
+        let mem = Memory.alloc(vwt.size.toInt32());
+        vwt.initializeWithCopy(mem, pointer, type.canonicalType._ptr);
+        return makeWrapper(type, mem, true);
     };
 
     Object.preventExtensions(wrapperObject);
