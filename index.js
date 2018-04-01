@@ -339,7 +339,7 @@ Type.prototype = {
 
     toString() {
         if (this.canonicalType) {
-            let [pointer, len] = Swift._api.swift_getTypeName(this.canonicalType._ptr, /* qualified? */ 1);
+            let [pointer, len] = _api.swift_getTypeName(this.canonicalType._ptr, /* qualified? */ 1);
             let str = Memory.readUtf8String(pointer, len.toInt32());
             if (str.length !== 0 && str !== "<<< invalid type >>>")
                 return str;
@@ -451,6 +451,13 @@ function findAllTypes(api) {
         }
 
     }
+
+    if (!typesByName.has("Any")) {
+        let Any = _api.swift_getExistentialTypeMetadata(1, ptr(0), 0, ptr(0));
+        Any = new Type(null, new types.TargetMetadata(Any), "Any");
+        typesByName.set("Any", Any);
+    }
+
     return typesByName;
 }
 
