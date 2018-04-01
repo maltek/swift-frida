@@ -197,6 +197,19 @@ function Type(nominalType, canonicalType, name, accessFunction) {
                 this.getSize = () => this.fields()[0].type.getSize();
                 break
         }
+
+        Object.defineProperty(this, 'Type', {
+            enumerable: true,
+            get() {
+                let meta;
+                if (this.kind === "Existential" || this.kind === "ExistentialMetatype") {
+                    meta = _api.swift_getExistentialMetatypeMetadata(canonicalType._ptr);
+                } else {
+                    meta = _api.swift_getMetatypeMetadata(canonicalType._ptr);
+                }
+                return new Type(null, new types.TargetMetadata(meta), this.toString() + ".Type");
+            },
+        });
     }
     if (this.kind === "Tuple") {
         this.tupleElements = function tupleElements() {
@@ -319,7 +332,7 @@ function Type(nominalType, canonicalType, name, accessFunction) {
             return this.withGenericParams();
         } else {
             let func = swiftValue.makeSwiftValue(this);
-            Object.assign(func, this);
+            Object.defineProperties(func, Object.getOwnPropertyDescriptors(this));
             Reflect.setPrototypeOf(func, Type.prototype);
             typesByCanonical.set(this.canonicalType._ptr.toString(), func);
             return func;
@@ -637,7 +650,7 @@ Swift = module.exports = {
                     'swift_stringFromUTF8InRawMemory': ['void', ['pointer', 'pointer', size_t]],
 
                     "swift_getTupleTypeMetadata": ['pointer', [size_t, 'pointer', 'pointer', 'pointer']],
-                    //"swift_getExistentialMetatypeMetadata": ['pointer', ['pointer']],
+                    "swift_getExistentialMetatypeMetadata": ['pointer', ['pointer']],
                     "swift_getExistentialTypeMetadata": ['pointer', ['int8', 'pointer', size_t, 'pointer']],
                     //'swift_getGenericMetadata': ['pointer', ['pointer', 'pointer']],
                     "swift_getObjCClassMetadata": ['pointer', ['pointer']],
