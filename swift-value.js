@@ -34,8 +34,7 @@ function swiftToString(obj) {
             let _swift_release_ = new NativeFunction(Memory.readPointer(Swift._api._swift_release), 'void', ['pointer']);
             _swift_release_(opaque.fixedSizeBuffer0);
         } else {
-            let destroy = vwt.destroy;
-            destroy(pointer, type._ptr);
+            vwt.destroy(pointer, type._ptr);
         }
     }
 
@@ -47,14 +46,15 @@ function swiftToString(obj) {
 
     let copy = Memory.alloc(4 * Process.pointerSize);
     let copyFn;
-    if (type.kind === "Existential" && type.getRepresentation() === "Opaque") {
+    let vwt = type.canonicalType.valueWitnessTable;
+    if (type.kind === "Existential" && type.canonicalType.getRepresentation() === "Opaque") {
         dynamicType = Swift._api.swift_getDynamicType(pointer, type.canonicalType._ptr, 1);
-        copyFn = type.canonicalType.valueWitnessTable.initializeBufferWithCopyOfBuffer;
+        copyFn = vwt.initializeBufferWithCopyOfBuffer;
     } else {
         dynamicType = type.canonicalType._ptr;
-        copyFn = type.canonicalType.valueWitnessTable.initializeBufferWithCopy;
+        copyFn = vwt.initializeBufferWithCopy;
     }
-    copyFn(copy, pointer, dynamicType);
+    copyFn.call(vwt, copy, pointer, dynamicType);
     Memory.writePointer(copy.add(3 * Process.pointerSize), dynamicType);
 
     let stringResult = Memory.alloc(Process.pointerSize * 3);
@@ -107,7 +107,7 @@ function swiftToString(obj) {
 }
 
 function isClassType(t) {
-    return t.kind === "Class" || (t.kind === "Existential" && t.getRepresentation() === "Class");
+    return t.kind === "Class" || (t.kind === "Existential" && t.canonicalType.getRepresentation() === "Class");
 }
 
 function makeFunctionWrapper(type, pointer) {
@@ -387,16 +387,16 @@ function makeWrapper(type, pointer, owned) {
         }
     }
 
-    if (type.kind === "Existential" && type.getRepresentation() === "Opaque") {
+    if (type.kind === "Existential" && type.canonicalType.getRepresentation() === "Opaque") {
         Object.defineProperty(wrapperObject, '$value', {
             enumerable: true,
             get() {
                 let cont = new types.OpaqueExistentialContainer(pointer);
-                let dynType = Swift._typeFromCanonical(cont.$type);
+                let dynType = Swift._typeFromCanonical(cont.type._ptr);
                 if (isClassType(dynType) || !dynType.canonicalType.valueWitnessTable.isValueInline) {
-                    return makeWrapper(pointer, dynType);
+                    return makeWrapper(dynType, pointer, false);
                 } else {
-                    return makeWrapper(cont.heapObject, dynType);
+                    return makeWrapper(dynType, cont.heapObject, false);
                 }
             },
             set(newVal) {
