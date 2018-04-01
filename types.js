@@ -1160,8 +1160,10 @@ function ConstTargetFarRelativeDirectPointer(ptr) {
     let offset = Memory.readPointer(ptr);
     return ptr.add(offset);
 }
-function TargetRelativeDirectPointerRuntime(ptr) {
+function TargetRelativeDirectPointerRuntime(ptr, nullable) {
     let offset = Memory.readS32(ptr);
+    if (nullable && offset === 0)
+        return null;
     return ptr.add(offset);
 }
 const GenericParameterDescriptorFlags = {
@@ -1174,7 +1176,7 @@ function TargetNominalTypeDescriptor(ptr) {
 TargetNominalTypeDescriptor.prototype = {
     // offset 0
     get mangledName() {
-        let addr = TargetRelativeDirectPointerRuntime(this._ptr);
+        let addr = TargetRelativeDirectPointerRuntime(this._ptr, true);
         return mangling.MANGLING_PREFIX + Memory.readUtf8String(addr);
     },
     // offset 4
@@ -1194,11 +1196,11 @@ TargetNominalTypeDescriptor.prototype = {
             // offset 8
             // doubly-null-terminated list of strings
             get fieldNames() {
-                return TargetRelativeDirectPointerRuntime(ptr.add(8));
+                return TargetRelativeDirectPointerRuntime(ptr.add(8), true);
             },
             // offset 12
             get getFieldTypes() {
-                return TargetRelativeDirectPointerRuntime(ptr.add(12));
+                return TargetRelativeDirectPointerRuntime(ptr.add(12), true);
             },
             hasFieldOffsetVector() {
                 return this.fieldOffsetVectorOffset !== 0;
@@ -1226,11 +1228,11 @@ TargetNominalTypeDescriptor.prototype = {
             // offset 8
             // doubly-null-terminated list of strings
             get caseNames() {
-                return TargetRelativeDirectPointerRuntime(ptr.add(8));
+                return TargetRelativeDirectPointerRuntime(ptr.add(8), true);
             },
             // offset 12
             get getCaseTypes() {
-                return TargetRelativeDirectPointerRuntime(ptr.add(12));
+                return TargetRelativeDirectPointerRuntime(ptr.add(12), true);
             },
 
             getNumPayloadCases() {
@@ -1256,7 +1258,7 @@ TargetNominalTypeDescriptor.prototype = {
 
     // offset 24
     get accessFunction() {
-        return TargetRelativeDirectPointerRuntime(this._ptr.add(24));
+        return TargetRelativeDirectPointerRuntime(this._ptr.add(24), true);
     },
 
     getGenericMetadataPattern() {
@@ -1314,10 +1316,10 @@ function TargetTypeMetadataRecord(record) {
 }
 TargetTypeMetadataRecord.prototype = {
     get _directType() {
-        return TargetRelativeDirectPointerRuntime(this._record);
+        return TargetRelativeDirectPointerRuntime(this._record, true);
     },
     get _typeDescriptor() {
-        return TargetRelativeDirectPointerRuntime(this._record);
+        return TargetRelativeDirectPointerRuntime(this._record, true);
     },
 
     get _flags() {
