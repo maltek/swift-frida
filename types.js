@@ -1076,7 +1076,7 @@ TargetExistentialTypeMetadata.prototype = Object.create(TargetMetadata.prototype
     },
     getSuperclassConstraint: {
         value() {
-            if (!this.flags.hasSuperclassConstraint())
+            if (this.isObjC() || !this.flags.hasSuperclassConstraint())
                 return null;
 
             // Get a pointer to tail-allocated storage for this metadata record.

@@ -47,7 +47,7 @@ function Type(nominalType, canonicalType, name, accessFunction) {
         }
     }
 
-    if (canonicalType && ((canonicalType.kind === "Class" && !canonicalType.flags.UsesSwift1Refcounting) ||
+    if (canonicalType && ((canonicalType.kind === "Class" && canonicalType.isTypeMetadata() && !canonicalType.flags.UsesSwift1Refcounting) ||
             canonicalType.kind === "ObjCClassWrapper")) {
         this.toJS = function(pointer) { return ObjC.Object(Memory.readPointer(pointer)); };
         this.fromJS = function (address, value) { _api.objc_storeStrong(address, value); return true; };
@@ -308,7 +308,7 @@ function Type(nominalType, canonicalType, name, accessFunction) {
         };
     }
 
-    if (canonicalType) {
+    if (canonicalType && (this.kind !== "Class" || canonicalType.isTypeMetadata())) {
         let size = canonicalType.valueWitnessTable.size; // TODO: Swift doesn't count the static overhead of classes here
         this.getSize = function() { return size };
         this.stride = canonicalType.valueWitnessTable.stride;
