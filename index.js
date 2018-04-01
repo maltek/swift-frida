@@ -401,6 +401,25 @@ function findAllTypes(api) {
     const sectionNames = [Memory.allocUtf8String("__swift2_types"), Memory.allocUtf8String("__swift2_proto")];
     const recordSizes = [8, 16];
 
+    function getTypePrio(t) {
+        if (t.canonicalType)
+            return 0;
+        if (t.nominalType)
+            return 1;
+        if (t.accessFunction)
+            return 2;
+        throw new Error("invalid state of type object");
+    }
+    function addType(t) {
+        let name = t.toString();
+        let other = typesByName.get(name);
+        if (!other || getTypePrio(t) > getTypePrio(other)) {
+            typesByName.set(name, t);
+            return true;
+        }
+        return false;
+    }
+
     let typesByName = new Map();
     for (let mod of Process.enumerateModulesSync()) {
         for (let section = 0; section < sectionNames.length; section++) {
@@ -424,16 +443,7 @@ function findAllTypes(api) {
                 let canonicalType = record.getCanonicalTypeMetadata(api);
 
                 if (nominalType || canonicalType) {
-                    let t = new Type(nominalType, canonicalType);
-                    let name = t.toString();
-                    let insert = true;
-                    if (typesByName.has(name)) {
-                        let other = typesByName.get(name);
-                        if (!t.canonicalType || other.canonicalType)
-                            insert = false;
-                    }
-                    if (insert)
-                        typesByName.set(name, t);
+                    addType(new Type(nominalType, canonicalType));
                 } else {
                     console.log(`metadata record without nominal or canonical type?! @${pointer.add(i)} of section ${section} in ${mod.name} ${record.getTypeKind()}`);
                 }
@@ -450,30 +460,23 @@ function findAllTypes(api) {
                 let demangled = Swift.demangle(exp.name);
                 if (demangled.startsWith(METADATA_PREFIX)) {
                     let name = demangled.substr(METADATA_PREFIX.length);
-                    if (!typesByName.get(name)) {
-                        // type metadata sometimes can have members at negative indices, so we need to
-                        // iterate until we find something that looks like the beginning of a Metadata object
-                        // (Sadly, that doesn't work for class metadata with ISA pointers, but it should be no
-                        // problem to find ObjC metadata for such classes.)
-                        for (let i = 0; i < 2; i++) {
-                            let ptr = exp.address.add(Process.pointerSize * i);
-                            if (Memory.readPointer(ptr).toString(10) in types.MetadataKind) {
-                                typesByName.set(name, new Type(null, new types.TargetMetadata(ptr), name));
-                                break;
-                            }
+                    // type metadata sometimes can have members at negative indices, so we need to
+                    // iterate until we find something that looks like the beginning of a Metadata object
+                    // (Sadly, that doesn't work for class metadata with ISA pointers, but it should be no
+                    // problem to find ObjC metadata for such classes.)
+                    for (let i = 0; i < 2; i++) {
+                        let ptr = exp.address.add(Process.pointerSize * i);
+                        if (Memory.readPointer(ptr).toString(10) in types.MetadataKind) {
+                            addType(new Type(null, new types.TargetMetadata(ptr), name));
+                            break;
                         }
                     }
                 } else if (demangled.startsWith(NOMINAL_PREFIX)) {
                     let name = demangled.substr(NOMINAL_PREFIX.length);
-                    let existing = typesByName.get(name);
-                    if (!existing || existing.accessFunction) {
-                        typesByName.set(name, new Type(new types.TargetNominalTypeDescriptor(exp.address), null, name));
-                    }
+                    addType(new Type(new types.TargetNominalTypeDescriptor(exp.address), null, name));
                 } else if (demangled.startsWith(METADATA_ACCESSOR_PREFIX)) {
                     let name = demangled.substr(METADATA_ACCESSOR_PREFIX.length);
-                    if (!typesByName.has(name)) {
-                        typesByName.set(name, new Type(null, null, name, exp.address));
-                    }
+                    addType(new Type(null, null, name, exp.address));
                 }
             }
         }
@@ -495,6 +498,32 @@ function findAllTypes(api) {
         let AnyClass = AnyObject.Type;
         typesByName.set("Swift.AnyObject.Type", AnyClass);
         typesByName.set("Swift.AnyClass", AnyClass);
+    }
+
+    let changed = true;
+    while (changed) {
+        changed = false;
+        for (let type of Array.from(typesByName.values())) {
+            let inner = [];
+            if ('enumCases' in type)
+                inner = inner.concat(type.enumCases());
+            if ('fields' in type)
+                inner = inner.concat(type.fields());
+            if ('tupleElements' in type)
+                inner = inner.concat(type.tupleElements());
+            if ('getArguments' in type)
+                inner = inner.concat(type.getArguments());
+            if ('returnType' in type)
+                inner.push(type.returnType);
+            for (let x of inner) {
+                if (x.type !== null)
+                    changed = addType(x.type) || changed;
+            }
+            if (type.kind === "Class" && type.canonicalType && type.canonicalType.superClass)
+                changed = addType(new Type(null, type.canonicalType.superClass)) || changed;
+            if (type.kind === "Existential" && type.canonicalType && type.canonicalType.getSuperclassConstraint())
+                changed = addType(new Type(null, type.canonicalType.getSuperclassConstraint())) || changed;
+        }
     }
 
     return typesByName;
