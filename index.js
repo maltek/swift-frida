@@ -191,7 +191,6 @@ function Type(nominalType, canonicalType, name, accessFunction) {
             case "Swift.UInt256":
             case "Swift.UInt512":
             case "Swift.RawPointer":
-                console.log(this.toString().split(".")[1]);
                 this.toJS = (pointer) => this.fields()[0].type.toJS(pointer);
                 this.fromJS = (pointer, value) => this.fields()[0].type.fromJS(pointer, value);
                 this.getSize = () => this.fields()[0].type.getSize();
@@ -445,6 +444,7 @@ function findAllTypes(api) {
         // we should see if there is some other way to find the nominal types for generic data types
         const METADATA_PREFIX = "type metadata for ";
         const METADATA_ACCESSOR_PREFIX = "type metadata accessor for ";
+        const NOMINAL_PREFIX = "nominal type descriptor for ";
         for (let exp of Module.enumerateExportsSync(mod.name)) {
             if (Swift.isSwiftName(exp.name)) {
                 let demangled = Swift.demangle(exp.name);
@@ -463,9 +463,15 @@ function findAllTypes(api) {
                             }
                         }
                     }
+                } else if (demangled.startsWith(NOMINAL_PREFIX)) {
+                    let name = demangled.substr(NOMINAL_PREFIX.length);
+                    let existing = typesByName.get(name);
+                    if (!existing || existing.accessFunction) {
+                        typesByName.set(name, new Type(new types.TargetNominalTypeDescriptor(exp.address), null, name));
+                    }
                 } else if (demangled.startsWith(METADATA_ACCESSOR_PREFIX)) {
                     let name = demangled.substr(METADATA_ACCESSOR_PREFIX.length);
-                    if (!typesByName.get(name)) {
+                    if (!typesByName.has(name)) {
                         typesByName.set(name, new Type(null, null, name, exp.address));
                     }
                 }
