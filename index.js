@@ -7,6 +7,8 @@ const mangling = require('./mangling');
 const swiftValue = require('./swift-value.js');
 let Swift;
 
+let _leakedMemory = []; // some runtime functions take pointers that must remain valid forever
+
 let size_t = Process.pointerSize === 8 ? 'uint64' : Process.pointerSize === 4 ? 'uint32' : "unsupported platform";
 
 function strlen(pointer) {
@@ -19,6 +21,26 @@ function strlen(pointer) {
 let _api = null;
 
 const typesByCanonical = new Map();
+const protocolTypes = new Map();
+function getOrMakeProtocolType(proto) {
+    let existing = protocolTypes.get(proto._ptr.toString());
+    if (existing)
+        return existing;
+
+    let arr = Memory.alloc(Process.pointerSize);
+    Memory.writePointer(arr, proto._ptr);
+
+    let canonical = _api.swift_getExistentialTypeMetadata(types.ProtocolClassConstraint.Any,
+        /*superClass*/ptr(0), /*numProtocols*/ 1, arr);
+
+    // TODO: only leak this, if a new canonical type was created
+    _leakedMemory.push(arr);
+
+    let name = Swift.isSwiftName(proto.name) ? Swift.demangle(proto.name) : proto.name;
+    let type = new Type(null, new types.TargetMetadata(canonical), name);
+    protocolTypes.set(proto._ptr.toString(), type);
+    return type;
+}
 
 function Type(nominalType, canonicalType, name, accessFunction) {
     if (canonicalType && typesByCanonical.has(canonicalType._ptr.toString())) {
@@ -209,6 +231,11 @@ function Type(nominalType, canonicalType, name, accessFunction) {
                 return new Type(null, new types.TargetMetadata(meta), this.toString() + ".Type");
             },
         });
+    }
+    if (this.kind === "Existential") {
+        this.protocols = function protocols() {
+            return canonicalType.protocols.map(p => getOrMakeProtocolType(p));
+        };
     }
     if (this.kind === "Tuple") {
         this.tupleElements = function tupleElements() {
@@ -435,6 +462,7 @@ function findAllTypes(api) {
                     record = new types.TargetTypeMetadataRecord(pointer.add(i));
                 } else {
                     record = new types.TargetProtocolConformanceRecord(pointer.add(i));
+                    addType(getOrMakeProtocolType(record.protocol));
                 }
                 let nominalType = null;
                 if (record.getTypeKind() === types.TypeMetadataRecordKind.UniqueNominalTypeDescriptor)
@@ -484,12 +512,12 @@ function findAllTypes(api) {
     }
 
     if (!typesByName.has("Any")) {
-        let Any = _api.swift_getExistentialTypeMetadata(/*Any*/ 1, /*superClass*/ ptr(0), /*numProtocols*/ 0, /*protcols*/ ptr(0));
+        let Any = _api.swift_getExistentialTypeMetadata(types.ProtocolClassConstraint.Any, /*superClass*/ ptr(0), /*numProtocols*/ 0, /*protcols*/ ptr(0));
         Any = new Type(null, new types.TargetMetadata(Any), "Any");
         typesByName.set("Any", Any);
     }
     if (!typesByName.has("Swift.AnyObject")) {
-        let AnyObject = _api.swift_getExistentialTypeMetadata(/*Class*/ 0, /*superClass*/ ptr(0), /*numProtocols*/ 0, /*protcols*/ ptr(0));
+        let AnyObject = _api.swift_getExistentialTypeMetadata(types.ProtocolClassConstraint.Class, /*superClass*/ ptr(0), /*numProtocols*/ 0, /*protcols*/ ptr(0));
         AnyObject = new Type(null, new types.TargetMetadata(AnyObject), "Swift.AnyObject");
         typesByName.set("Swift.AnyObject", AnyObject);
     }
@@ -514,8 +542,16 @@ function findAllTypes(api) {
             addType(type.returnType());
         if (type.kind === "Class" && type.canonicalType && type.canonicalType.superClass)
             addType(new Type(null, type.canonicalType.superClass));
-        if (type.kind === "Existential" && type.canonicalType && type.canonicalType.getSuperclassConstraint())
-            addType(new Type(null, type.canonicalType.getSuperclassConstraint()));
+        if (type.kind === "Existential" && type.canonicalType) {
+            for (let proto of type.canonicalType.protocols) {
+                addType(getOrMakeProtocolType(proto));
+                for (let inherited of proto.inheritedProtocols) {
+                    addType(getOrMakeProtocolType(inherited));
+                }
+            }
+            if (type.canonicalType.getSuperclassConstraint())
+                addType(new Type(null, type.canonicalType.getSuperclassConstraint()));
+        }
     }
 
     return typesByName;
@@ -578,13 +614,12 @@ Swift = module.exports = {
         return Array.from(typesByName.values());
     },
 
-    _leakedLabels: [],
     makeTupleType(labels, innerTypes) {
         if (innerTypes.length != labels.length)
             throw Error("labels array and innerTypes array need the same length!");
         let elements = innerTypes.length ? Memory.alloc(Process.pointerSize * innerTypes.length) : ptr(0);
         let labelsStr = Memory.allocUtf8String(labels.join(" ") + " ");
-        this._leakedLabels.push(labelsStr); // if the tuple type is new, we must not ever dealllocate this string
+        _leakedMemory.push(labelsStr); // if the tuple type is new, we must not ever dealllocate this string
         for (let i = 0; i < innerTypes.length; i++) {
             Memory.writePointer(elements.add(i * Process.pointerSize), innerTypes[i].canonicalType._ptr);
         }
