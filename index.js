@@ -745,6 +745,7 @@ Swift = module.exports = {
 
                     'swift_conformsToProtocol': ['pointer', ['pointer', 'pointer']],
 
+                    "swift_getTypeByName": ['pointer', ['pointer', size_t]],
                     "swift_getTypeName": [['pointer', 'pointer'],  ['pointer', 'uchar']],
                     "swift_getDynamicType": ['pointer', ['pointer', 'pointer', 'int8']],
 
