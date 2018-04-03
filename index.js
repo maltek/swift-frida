@@ -410,14 +410,14 @@ function findAllTypes(api) {
             return 2;
         throw new Error("invalid state of type object");
     }
+    let newTypes = [];
     function addType(t) {
         let name = t.toString();
         let other = typesByName.get(name);
         if (!other || getTypePrio(t) > getTypePrio(other)) {
             typesByName.set(name, t);
-            return true;
+            newTypes.push(t);
         }
-        return false;
     }
 
     let typesByName = new Map();
@@ -500,30 +500,22 @@ function findAllTypes(api) {
         typesByName.set("Swift.AnyClass", AnyClass);
     }
 
-    let changed = true;
-    while (changed) {
-        changed = false;
-        for (let type of Array.from(typesByName.values())) {
-            let inner = [];
-            if ('enumCases' in type)
-                inner = inner.concat(type.enumCases());
-            if ('fields' in type)
-                inner = inner.concat(type.fields());
-            if ('tupleElements' in type)
-                inner = inner.concat(type.tupleElements());
-            if ('getArguments' in type)
-                inner = inner.concat(type.getArguments());
-            if ('returnType' in type)
-                inner.push(type.returnType);
-            for (let x of inner) {
-                if (x.type !== null)
-                    changed = addType(x.type) || changed;
-            }
-            if (type.kind === "Class" && type.canonicalType && type.canonicalType.superClass)
-                changed = addType(new Type(null, type.canonicalType.superClass)) || changed;
-            if (type.kind === "Existential" && type.canonicalType && type.canonicalType.getSuperclassConstraint())
-                changed = addType(new Type(null, type.canonicalType.getSuperclassConstraint())) || changed;
-        }
+    while (newTypes.length) {
+        let type = newTypes.pop();
+        if ('enumCases' in type)
+            type.enumCases().filter(i => i.type).forEach(i => addType(i.type));
+        if ('fields' in type)
+            type.fields().filter(i => i.type).forEach(i => addType(i.type));
+        if ('tupleElements' in type)
+            type.tupleElements().filter(i => i.type).forEach(i => addType(i.type));
+        if ('getArguments' in type)
+            type.getArguments().filter(i => i.type).forEach(i => addType(i.type));
+        if ('returnType' in type)
+            addType(type.returnType());
+        if (type.kind === "Class" && type.canonicalType && type.canonicalType.superClass)
+            addType(new Type(null, type.canonicalType.superClass));
+        if (type.kind === "Existential" && type.canonicalType && type.canonicalType.getSuperclassConstraint())
+            addType(new Type(null, type.canonicalType.getSuperclassConstraint()));
     }
 
     return typesByName;
