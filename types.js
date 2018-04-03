@@ -274,7 +274,7 @@ function TargetProtocolConformanceRecord(ptr) {
 TargetProtocolConformanceRecord.prototype = {
     // offset 0
     get protocol() {
-        return RelativeIndirectablePointer(this._ptr.add(0));
+        return new TargetProtocolDescriptor(RelativeIndirectablePointer(this._ptr.add(0)));
     },
     // offset 4
     get directType() {
@@ -1095,22 +1095,14 @@ TargetExistentialTypeMetadata.prototype = Object.create(TargetMetadata.prototype
 });
 
 function TargetProtocolDescriptorList(pointer) {
-    this._ptr = pointer;
-}
-TargetProtocolDescriptorList.prototype = {
-    // offset 0
-    get numProtocols() {
-        return Memory.readPointer(this._ptr).toInt32();
-    },
-    // offset pointerSize
-    get protocols() {
-        let res = [];
-        let numProtocols = this.numProtocols;
-        for (let i = 0; i < numProtocols; i++) {
-            res.push(new TargetProtocolDescriptor(Memory.readPointer(this._ptr.add((i + 1) * Process.pointerSize))));
-        }
-        return res;
+    if (pointer.isNull())
+        return [];
+    let numProtocols = Memory.readPointer(pointer).toInt32();
+    let res = [];
+    for (let i = 0; i < numProtocols; i++) {
+        res.push(new TargetProtocolDescriptor(Memory.readPointer(pointer.add((i + 1) * Process.pointerSize))));
     }
+    return res;
 }
 function TargetProtocolDescriptor(pointer) {
     this._ptr = pointer;
@@ -1128,8 +1120,68 @@ TargetProtocolDescriptor.prototype = {
     get inheritedProtocols() {
         return new TargetProtocolDescriptorList(Memory.readPointer(this._ptr.add(2 * Process.pointerSize)));
     },
+    // offset 3*pointerSize
+    get _ObjC_InstanceMethods() {
+        return Memory.readPointer(this._ptr.add(3 * Process.pointerSize));
+    },
+    // offset 4*pointerSize
+    get _ObjC_ClassMethods() {
+        return Memory.readPointer(this._ptr.add(4 * Process.pointerSize));
+    },
+    // offset 5*pointerSize
+    get _ObjC_OptionalInstanceMethods() {
+        return Memory.readPointer(this._ptr.add(5 * Process.pointerSize));
+    },
+    // offset 6*pointerSize
+    get _ObjC_OptionalClassMethods() {
+        return Memory.readPointer(this._ptr.add(6 * Process.pointerSize));
+    },
+    // offset 7*pointerSize
+    get _ObjC_InstanceProperties() {
+        return Memory.readPointer(this._ptr.add(7 * Process.pointerSize));
+    },
+    // offset 8*pointerSize
+    get descriptorSize() {
+        return Memory.readU32(this._ptr.add(8 * Process.pointerSize));
+    },
+    // offset 8*pointerSize + 4
+    get flags() {
+        return flagsToObject(ProtocolDescriptorFlags, Memory.readU32(this._ptr.add(8 * Process.pointerSize + 4)));
+    },
+    // offset 8*pointerSize + 8
+    get minimumWitnessTableSizeInWords() {
+        if (!this.flags.IsResilient)
+            throw new Error("minimum witness table size not known!");
+        return Memory.readU16(this._ptr.add(8 * Process.pointerSize + 8));
+    },
+    // offset 8*pointerSize + 10
+    get defaultWitnessTableSizeInWords() {
+        if (!this.flags.IsResilient)
+            throw new Error("default witness table size not known!");
+        return Memory.readU16(this._ptr.add(8 * Process.pointerSize + 8));
+    },
+    // offset 8*pointerSize + 12
+    get reserved() {
+        return Memory.readU32(this._ptr.add(8 * Process.pointerSize + 12));
+    },
 
-    // .. some more fields
+    // offset 8*pointerSize + 16
+    getDefaultWitnesses() {
+        if (!this.flags.IsResilient)
+            throw new Error("default witness table not known!");
+        // table with minimum size + default size entries
+        return this._ptr.add(8 * Process.pointerSize + 16);
+    },
+};
+const ProtocolDescriptorFlags = {
+    IsSwift: 1,
+    ClassConstraint: 2,
+    DispatchStrategyMask: 0x3c,
+    DispatchStrategyShift: 2,
+    SpecialProtocolMask: 0x3C0,
+    SpecialProtocolShift: 6,
+    IsResilient: 0x400,
+    _ObjCReserved: 0xFFFF0000,
 };
 
 const TargetFunctionTypeFlags = {
@@ -1479,4 +1531,5 @@ module.exports = {
     OpaqueExistentialContainer: OpaqueExistentialContainer,
     ClassExistentialContainer: ClassExistentialContainer,
     ProtocolClassConstraint: ProtocolClassConstraint,
+    TargetProtocolDescriptor: TargetProtocolDescriptor,
 };
