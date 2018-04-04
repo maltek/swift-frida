@@ -113,28 +113,28 @@ function isClassType(t) {
 function makeFunctionWrapper(type, pointer) {
     return function(...argList) {
         if (type.kind !== "Function")
-            throw TypeError("this value has a non-function type, so it cannot be called");
+            throw new TypeError("this value has a non-function type, so it cannot be called");
 
         let flags = type.functionFlags;
         if (argList.length < flags.numArguments) {
-            throw TypeError("missing arguments: " + flags.numArguments + " arguments required");
+            throw new TypeError("missing arguments: " + flags.numArguments + " arguments required");
         } else if (argList.length > flags.numArguments) {
-            throw TypeError("too many arguments: " + flags.numArguments + " arguments required");
+            throw new TypeError("too many arguments: " + flags.numArguments + " arguments required");
         }
 
         if (flags.doesThrow) {
-            throw Error("calling a function that can throw is not yet supported"); // TODO
+            throw new Error("calling a function that can throw is not yet supported"); // TODO
         }
 
         switch (flags.convention) {
             case types.FunctionMetadataConvention.Swift:
-                throw Error("calling Swift functions not yet supported");
+                throw new Error("calling Swift functions not yet supported");
             case types.FunctionMetadataConvention.Block: {
                 let block = new ObjC.Block(pointer);
                 return block.implementation(...params);
             }
             case types.FunctionMetadataConvention.Thin:
-                throw Error("calling thin functions not yet supported");
+                throw new Error("calling thin functions not yet supported");
             case types.FunctionMetadataConvention.CFunctionPointer: {
                 let params = [];
                 let fridaTypes = [];
@@ -194,7 +194,7 @@ function makeFunctionWrapper(type, pointer) {
                                 else if (jsVal !== undefined)
                                     jsVal = Memory.readPointer(swiftOrJsVal.$pointer);
                             } else {
-                                throw Error("don't know how to convert a '" + argType.toString() + "' to a C value!");
+                                throw new Error("don't know how to convert a '" + argType.toString() + "' to a C value!");
                             }
                     }
 
@@ -204,7 +204,7 @@ function makeFunctionWrapper(type, pointer) {
                 for (let i = 0; i < flags.numArguments; i++) {
                     let res = convertType(argTypes[i], argList[i]);
                     if (res.jsVal === undefined && res.fridaType !== "void") {
-                        throw Error("argument " + i + " must not be undefined");
+                        throw new Error("argument " + i + " must not be undefined");
                     }
                     fridaTypes.push(res.fridaType);
                     params.push(res.jsVal);
@@ -294,7 +294,7 @@ function makeWrapper(type, pointer, owned) {
                         else if (enumCases.length < (1 << 64))
                             tag = Memory.readU64(pointer);
                         else
-                            throw Error("impossibly large number of enum cases");
+                            throw new Error("impossibly large number of enum cases");
                     } else if (numPayloads === 1) {
                         // single-payload enum: tag is after the value, or in spare bits if available
                         let opaqueVal = pointer;
@@ -518,7 +518,7 @@ function makeWrapper(type, pointer, owned) {
 
 function makeSwiftValue(type) {
     if (!type.canonicalType) {
-        throw Error("the type of a value must have a canonical type descriptor!");
+        throw new Error("the type of a value must have a canonical type descriptor!");
     }
 
     let SwiftValue = function (pointer) {

@@ -52,7 +52,7 @@ function Type(nominalType, canonicalType, name, accessFunction) {
 
     if (accessFunction) {
         if (nominalType || canonicalType || !name)
-            throw Error("type access function must only be provided if the type is not known");
+            throw new Error("type access function must only be provided if the type is not known");
         this.fixedName = name;
         this.accessFunction = accessFunction;
     }
@@ -86,14 +86,14 @@ function Type(nominalType, canonicalType, name, accessFunction) {
             // when there is a generic parent, we don't know the number of generic parameters
             if (this.nominalType && !this.nominalType.genericParams.flags.HasGenericParent &&
                     params.length != this.nominalType.genericParams.numGenericRequirements) {
-                throw Error("wrong number of generic parameters");
+                throw new Error("wrong number of generic parameters");
             }
 
             let args = [];
             let names = [];
             for (let param of params) {
                 if (param.isGeneric() || !param.canonicalType)
-                    throw Error("generic type parameter needs all own type parameters filled!");
+                    throw new Error("generic type parameter needs all own type parameters filled!");
                 args.push('pointer');
                 names.push(param.toString());
             }
@@ -149,7 +149,7 @@ function Type(nominalType, canonicalType, name, accessFunction) {
                     continue;
                 let info = (nomin.getKind() === "Class") ? nomin.clas : nomin.struct;
                 if (!info.hasFieldOffsetVector())
-                    throw Error("fields without offset vector not implemented");
+                    throw new Error("fields without offset vector not implemented");
 
                 let fieldTypeAccessor = new NativeFunction(info.getFieldTypes, 'pointer', ['pointer']);
                 let fieldTypes = fieldTypeAccessor(canon._ptr);
@@ -326,7 +326,7 @@ function Type(nominalType, canonicalType, name, accessFunction) {
     }
     if (this.kind == "Opaque") {
         if (!name)
-            throw Error("a name is required when creating Opaque types");
+            throw new Error("a name is required when creating Opaque types");
         this.fixedName = name;
 
         this.getSize = function getSize() {
@@ -395,7 +395,7 @@ function Type(nominalType, canonicalType, name, accessFunction) {
 
         this.getGenericParams = function getGenericParams() {
             if (!canonicalType.getGenericArgs)
-                throw Error("generic arguments for this kind of type not implemented");
+                throw new Error("generic arguments for this kind of type not implemented");
             return canonicalType.getGenericArgs().map(t => t === null ? null : new Type(null, t));
         };
     }
@@ -468,7 +468,7 @@ Type.prototype = {
         }
         this._name = "<<< invalid type >>>";
         return "<<< invalid type >>>";
-        //throw Error(`cannot get string representation for type without nominal or canonical type information`);
+        //throw new Error(`cannot get string representation for type without nominal or canonical type information`);
     },
 };
 
@@ -645,7 +645,7 @@ Swift = module.exports = {
 
     demangle(name) {
         if (!Swift.isSwiftName(name))
-            throw Error("function name '" + name + "' is not a mangled Swift function");
+            throw new Error("function name '" + name + "' is not a mangled Swift function");
 
         let cStr = Memory.allocUtf8String(name);
         let demangled = this._api.swift_demangle(cStr, name.length, ptr(0), ptr(0), 0);
@@ -668,7 +668,7 @@ Swift = module.exports = {
 
     makeTupleType(labels, innerTypes) {
         if (innerTypes.length != labels.length)
-            throw Error("labels array and innerTypes array need the same length!");
+            throw new Error("labels array and innerTypes array need the same length!");
         let elements = innerTypes.length ? Memory.alloc(Process.pointerSize * innerTypes.length) : ptr(0);
         let labelsStr = Memory.allocUtf8String(labels.join(" ") + " ");
         _leakedMemory.push(labelsStr); // if the tuple type is new, we must not ever dealllocate this string
@@ -829,7 +829,7 @@ Swift = module.exports = {
                         temporaryApi[name] = new NativeFunction(exp.address, signature[0], signature[1], signature[2]);
                     }
                 } else if(!(name in optionals)) {
-                    throw Error(`missing function '${name}' in module '${api.module}`);
+                    throw new Error(`missing function '${name}' in module '${api.module}`);
                 }
             });
 
@@ -838,7 +838,7 @@ Swift = module.exports = {
                 if (exp !== undefined && exp.type === 'variable') {
                     temporaryApi[name] = exp.address;
                 } else if(!(name in optionals)) {
-                    throw Error(`missing variable '${name}' in module '${api.module}`);
+                    throw new Error(`missing variable '${name}' in module '${api.module}`);
                 }
             });
         });
