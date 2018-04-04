@@ -1102,6 +1102,7 @@ function TargetProtocolDescriptorList(pointer) {
     for (let i = 0; i < numProtocols; i++) {
         res.push(new TargetProtocolDescriptor(Memory.readPointer(pointer.add((i + 1) * Process.pointerSize))));
     }
+    res.arrayLocation = pointer.add(Process.pointerSize);
     return res;
 }
 function TargetProtocolDescriptor(pointer) {

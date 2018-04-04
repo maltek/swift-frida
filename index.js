@@ -232,10 +232,62 @@ function Type(nominalType, canonicalType, name, accessFunction) {
             },
         });
     }
-    if (this.kind === "Existential") {
+    if (this.kind === "Existential" && canonicalType) {
         this.protocols = function protocols() {
-            return canonicalType.protocols.map(p => getOrMakeProtocolType(p));
+            return canonicalType.protocols.map(getOrMakeProtocolType);
         };
+        this.combineWith = function combineWith(other) {
+            if (other.kind !== "Existential")
+                throw new Error("can only combine existential types with each other");
+            let protos = canonicalType.protocols.concat(other.canonicalType.protocols);
+            // TODO: this is wrong, at least for protocols defined in nested contexts (see TypeDecl::compare)
+            protos.sort(function(p1, p2) {
+                if (p1.name < p2.name)
+                    return -1;
+                if (p1.name > p2.name)
+                    return 1;
+                return p1._ptr.compare(p2._ptr)
+            });
+            for (let i = 1; i < protos.length; i++) {
+                if (protos[i - 1]._ptr.toString() === protos[i]._ptr.toString()) {
+                    protos.splice(i, 1);
+                    i--;
+                }
+            }
+
+            let arr = Memory.alloc(protos.length * Process.pointerSize);
+            _leakedMemory.push(arr);
+            let names = [];
+            for (let i = 0; i < protos.length; i++) {
+                Memory.writePointer(arr.add(i * Process.pointerSize), protos[i]._ptr);
+                names.push(protos[i].name);
+            }
+
+            let bound = (canonicalType.isClassBounded() || other.canonicalType.isClassBounded()) ? "Class" : "Any";
+            bound = types.ProtocolClassConstraint[bound];
+
+            let superClass = canonicalType.getSuperclassConstraint();
+            superClass = superClass === null ? ptr(0) : superClass._ptr;
+
+            let canon = _api.swift_getExistentialTypeMetadata(bound, superClass, protos.length, arr);
+            return new Type(null, new types.TargetMetadata(canon), names.join(" + "));
+        };
+        if (!canonicalType.isClassBounded()) {
+            this.withClassBound = function withClassBound() {
+                let protocols = canonicalType.protocols;
+                let canon = _api.swift_getExistentialTypeMetadata(types.ProtocolClassConstraint.Class,
+                    superType.canonicalType._ptr, protocols.length, protocols.arrayLocation);
+                return new Type(null, new types.TargetMetadata(canon));
+            };
+        }
+        if (!canonicalType.getSuperclassConstraint() && !canonicalType.isObjC()) {
+            this.withSuperclassConstraint = function withSuperclassConstraint(superType) {
+                let protocols = canonicalType.protocols;
+                let canon = _api.swift_getExistentialTypeMetadata(types.ProtocolClassConstraint.Class,
+                    superType.canonicalType._ptr, protocols.length, protocols.arrayLocation);
+                return new Type(null, new types.TargetMetadata(canon));
+            };
+        }
     }
     if (this.kind === "Tuple") {
         this.tupleElements = function tupleElements() {
