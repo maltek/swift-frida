@@ -178,6 +178,7 @@ function Type(nominalType, canonicalType, name, accessFunction) {
         switch (this.toString()) {
             case "Swift.String":
                 this.fromJS = function (address, value) {
+                    // TODO: fromJS needs a parameter telling it whether it is initializing or assigning
                     canonicalType.valueWitnessTable.destroy(address, canonicalType._ptr);
                     let cStr = Memory.allocUtf8String(value);
                     api.swift_stringFromUTF8InRawMemory(address, cStr, value.length);
@@ -493,7 +494,7 @@ function findAllTypes(api) {
     function addType(t) {
         let name = t.toString();
         let other = typesByName.get(name);
-        if (!other || getTypePrio(t) > getTypePrio(other)) {
+        if (!other || getTypePrio(t) < getTypePrio(other)) {
             typesByName.set(name, t);
             newTypes.push(t);
         }
