@@ -1,4 +1,4 @@
-const types = require('./types');
+const metadata = require('./metadata');
 const {convention: CC, makeCallTrampoline, checkTrampolineError, convertToCParams} = require('./calling-convention');
 
 let selfPointers = new Map();
@@ -29,7 +29,7 @@ function swiftToString(obj) {
         strlen(ptr)
      */
     function __swift_destroy_boxed_opaque_existential_0(pointer) {
-        let opaque = new types.OpaqueExistentialContainer(pointer);
+        let opaque = new metadata.OpaqueExistentialContainer(pointer);
         let type = opaque.type;
         let vwt = opaque.type.valueWitnessTable;
         if (vwt.flags.IsNonInline) {
@@ -129,7 +129,7 @@ function makeFunctionWrapper(type, pointer) {
         }
 
         switch (flags.convention) {
-            case types.FunctionMetadataConvention.Swift: {
+            case metadata.FunctionMetadataConvention.Swift: {
                 if (params.length !== method.args.length)
                     throw new Error("wrong number of parameters");
                 let converted = [];
@@ -223,13 +223,13 @@ function makeFunctionWrapper(type, pointer) {
                 }
                 return retVal;
             }
-            case types.FunctionMetadataConvention.Block: {
+            case metadata.FunctionMetadataConvention.Block: {
                 let block = new ObjC.Block(pointer);
                 return block.implementation(...params);
             }
-            case types.FunctionMetadataConvention.Thin:
+            case metadata.FunctionMetadataConvention.Thin:
                 throw new Error("calling thin functions not yet supported");
-            case types.FunctionMetadataConvention.CFunctionPointer: {
+            case metadata.FunctionMetadataConvention.CFunctionPointer: {
                 let params = [];
                 let fridaTypes = [];
                 let argTypes = type.getArguments();
@@ -491,7 +491,7 @@ function makeWrapper(type, pointer, owned) {
         Object.defineProperty(wrapperObject, '$value', {
             enumerable: true,
             get() {
-                let cont = new types.OpaqueExistentialContainer(pointer);
+                let cont = new metadata.OpaqueExistentialContainer(pointer);
                 let dynType = Swift._typeFromCanonical(cont.type._ptr);
                 if (isClassType(dynType) || !dynType.canonicalType.valueWitnessTable.isValueInline) {
                     return makeWrapper(dynType, pointer, false);
@@ -510,7 +510,7 @@ function makeWrapper(type, pointer, owned) {
                     witnesses.push(conformance);
                 }
 
-                let cont = new types.OpaqueExistentialContainer(pointer);
+                let cont = new metadata.OpaqueExistentialContainer(pointer);
                 let oldVwt = cont.type.canonicalType.valueWitnessTable;
                 // TODO: support ObjC values
                 if (isClassType(cont.type))
