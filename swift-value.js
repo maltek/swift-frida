@@ -113,10 +113,10 @@ function isClassType(t) {
 }
 
 function makeFunctionWrapper(type, pointer) {
-    return function(...argList) {
-        if (type.kind !== "Function")
-            throw new TypeError("this value has a non-function type, so it cannot be called");
+    if (type.kind !== "Function")
+        throw new TypeError("this value has a non-function type, so it cannot be called");
 
+    return function(...argList) {
         let flags = type.functionFlags;
         if (argList.length < flags.numArguments) {
             throw new TypeError("missing arguments: " + flags.numArguments + " arguments required");
