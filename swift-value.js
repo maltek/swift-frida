@@ -5,15 +5,16 @@ let selfPointers = new Map();
 // We need to hook this function at startup, because hooking it seems to happen asynchronously
 // (maybe because this is basically self-modifying code?) and we don't want to run into race-conditions.
 let toCStringPtr = Module.findExportByName("libswiftFoundation.dylib", "_T0s14StringProtocolP10FoundationsAARzSS5IndexVADRtzlE01cA0Says4Int8VGSgSSACE8EncodingV5using_tF");
-Interceptor.attach(toCStringPtr, {
-    onEnter: function() {
-        if (selfPointers.has(this.threadId)) {
-            let selfRegister = Process.pointerSize === 8 ? "x20" : "r10";
-            this.context[selfRegister] = selfPointers.get(this.threadId);
-            selfPointers.delete(this.threadId)
-        }
-    },
-});
+if (toCStringPtr) {
+    Interceptor.attach(toCStringPtr, {
+        onEnter: function() {
+            if (selfPointers.has(this.threadId)) {
+                this.context[CC.selfRegister] = selfPointers.get(this.threadId);
+                selfPointers.delete(this.threadId)
+            }
+        },
+    });
+}
 
 function swiftToString(obj) {
     let type = obj.$type;
