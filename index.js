@@ -24,8 +24,9 @@ const typesByCanonical = new Map();
 const protocolTypes = new Map();
 function getOrMakeProtocolType(proto) {
     let existing = protocolTypes.get(proto._ptr.toString());
-    if (existing)
+    if (existing) {
         return existing;
+    }
 
     let arr = Memory.alloc(Process.pointerSize);
     Memory.writePointer(arr, proto._ptr);
@@ -330,6 +331,21 @@ function Type(nominalType, canonicalType, name, accessFunction) {
             throw new Error("a name is required when creating Opaque types");
         this.fixedName = name;
 
+        this.getCType = function getCType() {
+            const knownTypes = {
+                "Builtin.Int8": "int8",
+                "Builtin.Int16": "int16",
+                "Builtin.Int32": "int32",
+                "Builtin.Int64": "int64",
+                "Builtin.UInt8": "uint8",
+                "Builtin.UInt16": "uint16",
+                "Builtin.UInt32": "uint32",
+                "Builtin.UInt64": "uint64",
+                "Builtin.RawPointer": "pointer",
+                // TODO: others (git grep -wE 'Builtin\.\w+' | grep -owE 'Builtin\.[A-Z]\w+' | sort -u)
+            };
+            return knownTypes[this.fixedName];
+        };
         this.getSize = function getSize() {
             const knownSizes = {
                 "Builtin.Int8": 1,
@@ -404,6 +420,17 @@ function Type(nominalType, canonicalType, name, accessFunction) {
         this.getObjCObject = function getObjCObject() {
             return ObjC.Object(canonicalType.class_);
         };
+    }
+
+    if (canonicalType && ["Class", "Struct", "Enum"].indexOf(this.kind) !== -1) {
+        this.defineMethod = function defineMethod(address, name, type) {
+            // TODO: mutating or normal method?
+            if (type.kind !== "Function")
+                throw new Error("invalid type to act as method signature");
+            this._methods.set(name, {'address': address, 'returnType': type.returnType(), 'args': type.getArguments(),
+                'doesThrow': type.flags.doesThrow});
+        };
+        this._methods = new Map();
     }
 
     if (!this.isGeneric()) {
@@ -797,10 +824,11 @@ Swift = module.exports = {
                     "swift_getEnumCaseMultiPayload": ['uint',  ['pointer', 'pointer']],
 
                     'swift_conformsToProtocol': ['pointer', ['pointer', 'pointer']],
+                    'swift_dynamicCast': ['bool', ['pointer', 'pointer', 'pointer', 'pointer', size_t]],
+                    "swift_getDynamicType": ['pointer', ['pointer', 'pointer', 'int8']],
 
                     "swift_getTypeByName": ['pointer', ['pointer', size_t]],
                     "swift_getTypeName": [['pointer', 'pointer'],  ['pointer', 'uchar']],
-                    "swift_getDynamicType": ['pointer', ['pointer', 'pointer', 'int8']],
 
                     "_T0s4dumpxx_q_z2toSSSg4nameSi6indentSi8maxDepthSi0E5Itemsts16TextOutputStreamR_r0_lF": [[['pointer', 'pointer', 'pointer'], 'pointer'], ['pointer', 'pointer', 'pointer', 'pointer', 'pointer', 'int', 'pointer', 'pointer', 'pointer', 'pointer', 'pointer', 'pointer']],
 

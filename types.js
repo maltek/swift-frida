@@ -44,8 +44,21 @@ TypeLayout.prototype = {
     // offset 3* pointerSize
     get extraInhabitantFlags() {
         if (!this.flags.HasExtraInhabitants)
-            throw new Error("extra inhabitant flag not available");
-        return Memory.readPointer(this._ptr.add(3 * Process.pointerSize));
+            return 0;
+        return new ExtraInhabitantFlags(this._ptr.add(3 * Process.pointerSize));
+    },
+};
+function ExtraInhabitantFlags(pointer) {
+    this._ptr = pointer;
+}
+ExtraInhabitantFlags.NumExtraInhabitantsMask = 0x7FFFFFFF;
+ExtraInhabitantFlags.prototype = {
+    get data() {
+        return Memory.readPointer(this._ptr);
+    },
+
+    getNumExtraInhabitants() {
+        return this.data & ExtraInhabitantFlags.NumExtraInhabitantsMask;
     },
 };
 function ValueWitnessTable(pointer) {
@@ -385,7 +398,7 @@ TargetProtocolConformanceRecord.prototype = {
                 break;
 
             case ProtocolConformanceReferenceKind.WitnessTableAccessor:
-                throw new Error("not witness table");
+                throw new Error("no witness table");
         }
         return this.witnessTable;
     },
@@ -511,16 +524,24 @@ function TargetMetadata(pointer) {
         case "Enum":
         case "Optional":
             return new TargetEnumMetadata(pointer);
+        //case "Opaque":
         case "Tuple":
             return new TargetTupleTypeMetadata(pointer);
         case "Function":
             return new TargetFunctionTypeMetadata(pointer);
-        case "ForeignClass":
-            return new TargetForeignTypeMetadata(pointer);
-        case "ObjCClassWrapper":
-            return new TargetObjCClassWrapperMetadata(pointer);
         case "Existential":
             return new TargetExistentialTypeMetadata(pointer);
+        case "Metatype":
+            return new TargetMetatypeMetadata(pointer);
+        case "ObjCClassWrapper":
+            return new TargetObjCClassWrapperMetadata(pointer);
+        case "ExistentialMetatype":
+            return new TargetExistentialMetatypeMetadata(pointer);
+        case "ForeignClass":
+            return new TargetForeignTypeMetadata(pointer);
+        // case "HeapLocalVariable":
+        // case "HeapGenericLocalVariable":
+        // case  "ErrorObject":
     }
 }
 TargetMetadata.prototype = {
@@ -945,7 +966,7 @@ TargetFunctionTypeMetadata.prototype = Object.create(TargetMetadata.prototype, {
         enumerable: true,
     },
 });
-const ForeginTypeMetadataFlags = {
+const ForeignTypeMetadataFlags = {
     HasInitializationFunction: 1,
 };
 function TargetForeignTypeMetadata(pointer) {
@@ -958,7 +979,7 @@ TargetForeignTypeMetadata.prototype = Object.create(TargetMetadata.prototype, {
     // offset -2 * pointerSize
     flags: {
         get() {
-            return flagsToObject(ForeginTypeMetadataFlags, Memory.readPointer(this._ptr.sub(2*Process.pointerSize)));
+            return flagsToObject(ForeignTypeMetadataFlags, Memory.readPointer(this._ptr.sub(2*Process.pointerSize)));
         },
         enumerable: true,
     },
@@ -1092,6 +1113,54 @@ TargetExistentialTypeMetadata.prototype = Object.create(TargetMetadata.prototype
     /*projectValue*/
     /*getDynamicType*/
     /*getWitnessTable*/
+});
+function TargetExistentialMetatypeMetadata(pointer) {
+    this._ptr = pointer;
+    if (this.kind !== "ExistentialMetatype")
+        throw new Error("type is not a metatype");
+}
+TargetExistentialMetatypeMetadata.prototype = Object.create(TargetMetadata.prototype, {
+    // offset pointerSize
+    instanceType: {
+        get() {
+            return new TargetMetadata(Memory.readPointer(this._ptr.add(Process.pointerSize)));
+        },
+        enumerable: true,
+    },
+    // offset 2*pointerSize
+    flags: {
+        get() {
+            return new ExistentialTypeFlags(Memory.readPointer(this._ptr.add(2*Process.pointerSize)));
+        },
+        enumerable: true,
+    },
+
+    isObjC: {
+        value() {
+            return this.isClassBounded() && this.flags.getNumWitnessTables() == 0;
+        },
+        enumerable: true,
+    },
+    isClassBounded: {
+        value() {
+            return this.flags.getClassConstraint() == "Class";
+        },
+        enumerable: true,
+    },
+});
+function TargetMetatypeMetadata(pointer) {
+    this._ptr = pointer;
+    if (this.kind !== "Metatype")
+        throw new Error("type is not a metatype");
+}
+TargetMetatypeMetadata.prototype = Object.create(TargetMetadata.prototype, {
+    // offset pointerSize
+    instanceType: {
+        get() {
+            return new TargetMetadata(Memory.readPointer(this._ptr.add(Process.pointerSize)));
+        },
+        enumerable: true,
+    },
 });
 
 function TargetProtocolDescriptorList(pointer) {
@@ -1234,6 +1303,9 @@ TargetNominalTypeDescriptor.prototype = {
     },
     // offset 4
     get clas() {
+        if (this.getKind() !== "Class" && this.getKind() !== "Struct")
+            throw new Error(`this nominal type descriptor has no class or struct metadata`);
+
         let ptr = this._ptr.add(4);
         return {
             _ptr: ptr,
@@ -1263,12 +1335,18 @@ TargetNominalTypeDescriptor.prototype = {
 
     // offset 4
     get struct() {
+        if (this.getKind() !== "Struct")
+            throw new Error(`this nominal type descriptor has no enum metadata`);
+
         return this.clas;
     },
 
     // offset 4
     get enum_() {
         let ptr = this._ptr.add(4);
+        if (this.getKind() !== "Enum" && this.getKind() !== "Optional")
+            throw new Error(`this nominal type descriptor has no enum metadata`);
+
         return {
             // offset 0
             get numPayloadCasesAndPayloadSizeOffset() {
@@ -1518,19 +1596,19 @@ const ProtocolClassConstraint = {
 };
 
 module.exports = {
-    TargetMetadata: TargetMetadata,
-    TargetClassMetadata: TargetClassMetadata,
-    TargetProtocolConformanceRecord: TargetProtocolConformanceRecord,
-    TargetTypeMetadataRecord: TargetTypeMetadataRecord,
-    TargetNominalTypeDescriptor: TargetNominalTypeDescriptor,
-    TargetFunctionTypeFlags: TargetFunctionTypeFlags,
-    NominalTypeKind: NominalTypeKind,
-    TypeMetadataRecordKind: TypeMetadataRecordKind,
-    FieldTypeFlags: FieldTypeFlags,
-    FunctionMetadataConvention: FunctionMetadataConvention,
-    MetadataKind: MetadataKind,
-    OpaqueExistentialContainer: OpaqueExistentialContainer,
-    ClassExistentialContainer: ClassExistentialContainer,
-    ProtocolClassConstraint: ProtocolClassConstraint,
-    TargetProtocolDescriptor: TargetProtocolDescriptor,
+    TargetMetadata,
+    TargetClassMetadata,
+    TargetProtocolConformanceRecord,
+    TargetTypeMetadataRecord,
+    TargetNominalTypeDescriptor,
+    TargetFunctionTypeFlags,
+    NominalTypeKind,
+    TypeMetadataRecordKind,
+    FieldTypeFlags,
+    FunctionMetadataConvention,
+    MetadataKind,
+    OpaqueExistentialContainer,
+    ClassExistentialContainer,
+    ProtocolClassConstraint,
+    TargetProtocolDescriptor,
 };

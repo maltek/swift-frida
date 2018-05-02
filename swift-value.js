@@ -1,4 +1,5 @@
 const types = require('./types');
+const {convention: CC, makeCallTrampoline, checkTrampolineError, convertToCParams} = require('./calling-convention');
 
 let selfPointers = new Map();
 // We need to hook this function at startup, because hooking it seems to happen asynchronously
@@ -127,8 +128,100 @@ function makeFunctionWrapper(type, pointer) {
         }
 
         switch (flags.convention) {
-            case types.FunctionMetadataConvention.Swift:
-                throw new Error("calling Swift functions not yet supported");
+            case types.FunctionMetadataConvention.Swift: {
+                if (params.length !== method.args.length)
+                    throw new Error("wrong number of parameters");
+                let converted = [];
+
+                // see NativeConventionSchema::getCoercionTypes
+                for (let i = 0; i < params.length; i++) {
+                    // TODO: floats/doubles, vectors
+                    // see classifyArgumentType in swift-clang/lib/CodeGen/TargetInfo.cpp
+                    let type = method.args[i].type;
+                    let vwt = type.canonicalType.valueWitnessTable;
+                    if (vwt.size === 0)
+                        continue;
+
+                    // TODO: verify these are the right conditions for indirect args
+                    if (method.args[i].inout || vwt.flags.IsNonBitwiseTakable || vwt.size > CC.maxInlineArgument) {
+                        let val = Memory.alloc(Process.pointerSize);
+                        val.writePointer(method.args[i].$pointer);
+                        // TODO: conversion from JS types
+                        converted.push({val, size: Process.pointerSize, stride: Process.pointerSize});
+                    } else {
+                        let val = Memory.alloc(vwt.size);
+                        if ("$pointer" in params[i] || !('fromJS' in type) || !type.fromJS(val, params[i]))
+                            vwt.initializeWithCopy(val, params[i].$pointer, type.canonicalType._ptr);
+                        converted.push({val, size: vwt.size, stide: vwt.stride});
+                    }
+                }
+                let self = pointer;
+                let indirectReturn = false;
+                let cReturnType = 'void';
+                if (method.returnType) {
+                    let vwt = method.returnType.valueWitnessTable;
+                    // TODO: verify these are the right conditions for indirect returns
+                    if (vwt.size > CC.maxInlineReturn || vwt.flags.IsNonPOD) {
+                        indirectReturn = true;
+                        let val = Memory.alloc(vwt.size);
+                        converted.unshift({val, size: Process.pointerSize, stride: Process.pointerSize});
+                    } else {
+                        let alignedSize = vwt.size + vwt.stride;
+                        let cReturnType = [];
+                        const maxVoluntaryInt = Process.pointerSize;
+                        for (let size of [8, 4, 2, 1]) {
+                            // TODO: specify larger integers for int types larger than pointers
+                            while (size <= maxVoluntaryInt && alignedSize > 0 && alignedSize % size === 0) {
+                                // TODO: floats/doubles, vectors
+                                cReturnType.push('uint' + (size * 8).toString());
+                                alignedSize -= size;
+                            }
+                        }
+                    }
+                }
+
+                let indirectResultPointer = undefined;
+                if (indirectReturn && CC.indirectResultRegister)
+                    indirectResultPointer = converted.shift()[0];
+
+                cParams = convertToCParams(params);
+
+                let trampoline = makeCallTrampoline(method.address, method.doesThrow, self, indirectResultPointer);
+                let trampolineFn = new NativeFunction(trampoline.callAddr, cReturnType, cArgTypes);
+                trampolineFn(...cParams);
+
+                let err;
+                if (method.doesThrow) {
+                    err = checkTrampolineError();
+                    if (err !== undefined) {
+                        // TODO: swift_getErrorValue
+                        throw new Error("handling errors not yet implemented");
+                        return err;
+                    }
+                }
+
+                let retVal = undefined;
+                if (method.returnType) {
+                    let vwt = method.returnType.valueWitnessTable;
+                    let loc;
+                    if (indirectReturn) {
+                        loc = converted[0][0];
+                    } else {
+                        loc = Memory.alloc(vwt.size);
+                        for (let i = 0; i < vwt.size; i += Process.pointerSize) {
+                            Memory.writePointer(loc.add(i), registerState[CC.returnRegisters[i]]);
+                        }
+                    }
+                    if ('toJS' in method.returnType)
+                        retVal = field.type.toJS(loc);
+
+                    if (retVal === undefined)
+                        retVal = makeWrapper(method.returnType, loc, true);
+                    else
+                        vwt.destroy(loc, method.returnType.canonicalType._ptr);
+                }
+                return retVal;
+            }
             case types.FunctionMetadataConvention.Block: {
                 let block = new ObjC.Block(pointer);
                 return block.implementation(...params);
@@ -464,6 +557,17 @@ function makeWrapper(type, pointer, owned) {
         }
     }
 
+    if ('_methods' in type) {
+        for (let [name, method] of type._methods.entries()) {
+            Object.defineProperty(wrapperObject, name, {
+                enumerable: true,
+                value(...params) {
+                    return makeFunctionWrapper(method.type, method.address)(...params);
+                },
+            });
+        }
+    }
+
     let invalidateWrapper = function() {
         Object.keys(wrapperObject).forEach(key => Reflect.deleteProperty(wrapperObject, key));
         pointer = undefined;
@@ -530,5 +634,5 @@ function makeSwiftValue(type) {
 }
 
 module.exports = {
-    makeSwiftValue: makeSwiftValue,
+    makeSwiftValue,
 };

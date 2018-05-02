@@ -13,19 +13,5 @@ Object.defineProperty(global, 'Swift', {
 
 
 
-var all_fns = {};
-var func_locs = {};
-Process.enumerateModulesSync().forEach(function(m) {
-    Module.enumerateExportsSync(m.name).map(function(x) {
-        if (x.name.startsWith(mangling.MANGLING_PREFIX))
-            return [Swift.demangle(x.name), x.address];
-        else
-            return [x.name, x.address];
-    }).forEach(function(name) {
-        all_fns[name[0]] = name[1];
-        func_locs[name[1]] = m.name;
-    });
-});
-global.all_fns = all_fns;
-global.func_locs = func_locs;
-console.log(Swift.enumerateTypesSync().filter(x => x.toString().indexOf("Builtin") !== -1).join("\n"));
+//console.log(Swift.enumerateTypesSync().filter(x => x.toString().indexOf("Any") !== -1).join("\n"));
+//var t = Swift._typesByName.get("Foo.ViewController"); var testVar = new t(Module.findExportByName("Foo", "_T04Foo7testVarAA14ViewControllerCSgv")); console.log(testVar.toString())
