@@ -151,11 +151,12 @@ function Type(nominalType, canonicalType, name, accessFunction) {
                     let typeFlags = type.and(metadata.FieldTypeFlags.typeMask);
                     type = new metadata.TargetMetadata(type.and(~metadata.FieldTypeFlags.typeMask));
                     let curOffset = Memory.readPointer(fieldOffsets.add(j * Process.pointerSize));
+                    let fieldNameStr = Memory.readUtf8String(fieldName);
 
                     results.push({
-                        name: Memory.readUtf8String(fieldName),
+                        name: fieldNameStr,
                         offset: offset.add(curOffset),
-                        type: new Type(null, type, "?Unknown type of " +  this.toString()),
+                        type: new Type(null, type, `?Unknown type of ${this}.${fieldNameStr}`),
                         weak: (typeFlags & metadata.FieldTypeFlags.Weak) === metadata.FieldTypeFlags.Weak,
                     });
                     fieldName = fieldName.add(strlen(fieldName) + 1);
