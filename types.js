@@ -264,21 +264,37 @@ function Type(nominalType, canonicalType, name, accessFunction) {
             let canon = Swift._api.swift_getExistentialTypeMetadata(bound, superClass, protos.length, arr);
             return new Type(null, new metadata.TargetMetadata(canon), names.join(" + "));
         };
-        if (!canonicalType.isClassBounded()) {
+        if (canonicalType.isClassBounded()) {
+            this.withoutClassBound = function withoutClassBound() {
+                let protocols = canonicalType.protocols;
+                let canon = Swift._api.swift_getExistentialTypeMetadata(metadata.ProtocolClassConstraint.Any,
+                    ptr(0), protocols.length, protocols.arrayLocation);
+                return new Type(null, new metadata.TargetMetadata(canon));
+            };
+        } else {
             this.withClassBound = function withClassBound() {
                 let protocols = canonicalType.protocols;
                 let canon = Swift._api.swift_getExistentialTypeMetadata(metadata.ProtocolClassConstraint.Class,
-                    superType.canonicalType._ptr, protocols.length, protocols.arrayLocation);
+                    ptr(0), protocols.length, protocols.arrayLocation);
                 return new Type(null, new metadata.TargetMetadata(canon));
             };
         }
-        if (!canonicalType.getSuperclassConstraint() && !canonicalType.isObjC()) {
-            this.withSuperclassConstraint = function withSuperclassConstraint(superType) {
-                let protocols = canonicalType.protocols;
-                let canon = Swift._api.swift_getExistentialTypeMetadata(metadata.ProtocolClassConstraint.Class,
-                    superType.canonicalType._ptr, protocols.length, protocols.arrayLocation);
-                return new Type(null, new metadata.TargetMetadata(canon));
-            };
+        if (!canonicalType.isObjC()) {
+            if (canonicalType.getSuperclassConstraint()) {
+                this.withoutSuperclassConstraint = function withoutSuperclassConstraint() {
+                    let protocols = canonicalType.protocols;
+                    let canon = Swift._api.swift_getExistentialTypeMetadata(metadata.ProtocolClassConstraint.Class,
+                        ptr(0), protocols.length, protocols.arrayLocation);
+                    return new Type(null, new metadata.TargetMetadata(canon));
+                };
+            } else {
+                this.withSuperclassConstraint = function withSuperclassConstraint(superType) {
+                    let protocols = canonicalType.protocols;
+                    let canon = Swift._api.swift_getExistentialTypeMetadata(metadata.ProtocolClassConstraint.Class,
+                        superType.canonicalType._ptr, protocols.length, protocols.arrayLocation);
+                    return new Type(null, new metadata.TargetMetadata(canon));
+                };
+            }
         }
     }
     if (this.kind === "Tuple") {
