@@ -5,6 +5,7 @@ function strlen(pointer) {
     return i;
 }
 
+let _leakedMemory = []; // some runtime functions take pointers that must remain valid forever
 
 const typesByCanonical = new Map();
 const protocolTypes = new Map();
@@ -19,12 +20,14 @@ function getOrMakeProtocolType(proto) {
 
     let canonical = Swift._api.swift_getExistentialTypeMetadata(metadata.ProtocolClassConstraint.Any,
         /*superClass*/ptr(0), /*numProtocols*/ 1, arr);
+    canonical = new metadata.TargetMetadata(canonical);
 
-    // TODO: only leak this, if a new canonical type was created
-    _leakedMemory.push(arr);
+    if (canonical.protocols.arrayLocation.toString() === arr.toString()) {
+        _leakedMemory.push(arr);
+    }
 
     let name = Swift.isSwiftName(proto.name) ? Swift.demangle(proto.name) : proto.name;
-    let type = new Type(null, new metadata.TargetMetadata(canonical), name);
+    let type = new Type(null, canonical, name);
     protocolTypes.set(proto._ptr.toString(), type);
     return type;
 }

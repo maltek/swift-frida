@@ -75,13 +75,17 @@ Swift = module.exports = {
             throw new Error("labels array and innerTypes array need the same length!");
         let elements = innerTypes.length ? Memory.alloc(Process.pointerSize * innerTypes.length) : ptr(0);
         let labelsStr = Memory.allocUtf8String(labels.join(" ") + " ");
-        _leakedMemory.push(labelsStr); // if the tuple type is new, we must not ever dealllocate this string
         for (let i = 0; i < innerTypes.length; i++) {
             Memory.writePointer(elements.add(i * Process.pointerSize), innerTypes[i].canonicalType._ptr);
         }
         let valueWitnesses = ptr(0);
         let pointer = this._api.swift_getTupleTypeMetadata(innerTypes.length, elements, labelsStr, valueWitnesses);
-        return new types.Type(null, new metadata.TargetMetadata(pointer));
+        let canonical = new metadata.TargetMetadata(pointer);
+
+        if (canonical.labels.toString === labelsStr.toString())
+            _leakedMemory.push(labelsStr); // if the tuple type is new, we must not ever dealllocate this string
+
+        return new types.Type(null, canonical);
     },
 
     makeFunctionType(args, returnType, flags) {
