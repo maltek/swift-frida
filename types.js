@@ -412,6 +412,15 @@ function Type(nominalType, canonicalType, name, accessFunction) {
             return false;
         };
     }
+    if (canonicalType && this.kind === "Class") {
+        this.superClass = function superClass() {
+            let canon = canonicalType.superClass;
+            if (canon === null)
+                return null;
+            return new Type(null, canon, `?superClass of ${this}`);
+        };
+
+    }
 
     if (canonicalType && (this.kind !== "Class" || canonicalType.isTypeMetadata())) {
         let size = canonicalType.valueWitnessTable.size; // TODO: Swift doesn't count the static overhead of classes here
@@ -529,6 +538,9 @@ function findAllTypes(api) {
     }
     let newTypes = [];
     function addType(t) {
+        if (t === null)
+            return;
+
         let name = t.toString();
         let other = typesByName.get(name);
         if (!other || getTypePrio(t) < getTypePrio(other)) {
@@ -629,8 +641,8 @@ function findAllTypes(api) {
             type.getArguments().filter(i => i.type).forEach(i => addType(i.type));
         if ('returnType' in type)
             addType(type.returnType());
-        if (type.kind === "Class" && type.canonicalType && type.canonicalType.superClass)
-            addType(new Type(null, type.canonicalType.superClass));
+        if ('superClass' in type)
+            addType(type.superClass());
         if (type.kind === "Existential" && type.canonicalType) {
             for (let proto of type.canonicalType.protocols) {
                 addType(getOrMakeProtocolType(proto));
