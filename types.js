@@ -1,3 +1,6 @@
+const metadata = require('./metadata');
+const swiftValue = require('./swift-value');
+
 function strlen(pointer) {
     let i;
     for (i = 0; Memory.readU8(pointer.add(i)) !== 0; i++) {
