@@ -491,7 +491,7 @@ Type.prototype = {
             let name = Swift.demangle(this.nominalType.mangledName);
             if (this.nominalType.genericParams.isGeneric()) {
                 let params = [];
-                if (this.canonicalType) {
+                if (this.canonicalType && "getGenericParams" in this) {
                     params = this.getGenericParams().map(arg => arg.toString());
                 } else {
                     if (this.nominalType.genericParams.flags.HasGenericParent) {
