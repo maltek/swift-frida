@@ -15,6 +15,19 @@ if (toCStringPtr) {
         },
     });
 }
+let dumpPtr = Module.findExportByName("libswiftCore.dylib", "_T0s4dumpxx_q_z2toSSSg4nameSi6indentSi8maxDepthSi0E5Itemsts16TextOutputStreamR_r0_lF");
+let indirectResults;
+if (dumpPtr && CC.indirectResultRegister !== undefined) {
+    indirectResults = new Map();
+    Interceptor.attach(dumpPtr, {
+        onEnter: function() {
+            if (indirectResults.has(this.threadId)) {
+                this.context[CC.indirectResultRegister] = indirectResults.get(this.threadId)[1];
+                indirectResults.delete(this.threadId)
+            }
+        },
+    });
+}
 
 function swiftToString(obj) {
     let type = obj.$type;
@@ -72,22 +85,31 @@ function swiftToString(obj) {
 
     const LONG_MAX = ptr(0).not().shr(1);
 
+    let returnAlloc = Memory.alloc(4 * Process.pointerSize);
     // TODO: default arguments should in theory be retrieved via generator functions
-    let res = dump(/*value*/ copy,
+    let params = [
+        /*value*/ copy,
         /*to*/ stringResult,
-        /*name*/ ptr(0), ptr(0), ptr(0), 1,
+        /*name*/ ptr(0), ptr(0), ptr(0), 1, // nil
         /*indent*/ ptr(0),
         /*maxDepth*/ LONG_MAX,
         /*maxItems*/ LONG_MAX,
         /*static type of `value`*/ Any,
         /*static type of `to`*/ SwiftString.canonicalType._ptr,
-        /*how to use `to` as a TextOutputStream*/ textOutputStreamWitnessTableForString);
+        /*how to use `to` as a TextOutputStream*/ textOutputStreamWitnessTableForString
+    ];
+    if (CC.indirectResultRegister === undefined) {
+        // indirect return value is just another parameter
+        params.unshift(returnAlloc);
+    } else {
+        // indirect return value is set by the installed hook
+        indirectResults.set(threadId, returnAlloc)
+    }
 
-    // We really should be calling ___swift_destroy_boxed_opaque_existential_0  on res
-    // but Frida already has deconstructed it into a struct for us.
-    // But we know that `dump` just returns a pointer to the container the `copy` parameter points to --
-    // so let's just destroy that.
-    __swift_destroy_boxed_opaque_existential_0(copy);
+    dump.apply(null, params);
+
+    // Destroy the return value (a copy of the existential container for the dumped value).
+    __swift_destroy_boxed_opaque_existential_0(returnAlloc);
 
     let encoding = Memory.readPointer(Swift._api._T0SS10FoundationE8EncodingV4utf8ACfau());
 
@@ -95,6 +117,7 @@ function swiftToString(obj) {
     let listener;
     let threadId = Process.getCurrentThreadId();
     let toCString = new NativeFunction(toCStringPtr, 'pointer', ['pointer', 'pointer', 'pointer']);
+
     selfPointers.set(threadId, stringResult);
     let array = toCString(encoding, SwiftString.canonicalType._ptr, witnessTableStringProtocol);
 

@@ -6,6 +6,8 @@ const metadata = require('./metadata');
 const types = require('./types');
 const mangling = require('./mangling');
 const swiftValue = require('./swift-value');
+const CC = require('./calling-convention').convention;
+
 let Swift;
 let _api = null;
 
@@ -210,7 +212,11 @@ Swift = module.exports = {
                     "swift_getTypeByName": ['pointer', ['pointer', size_t]],
                     "swift_getTypeName": [['pointer', 'pointer'],  ['pointer', 'uchar']],
 
-                    "_T0s4dumpxx_q_z2toSSSg4nameSi6indentSi8maxDepthSi0E5Itemsts16TextOutputStreamR_r0_lF": [[['pointer', 'pointer', 'pointer'], 'pointer'], ['pointer', 'pointer', 'pointer', 'pointer', 'pointer', 'int', 'pointer', 'pointer', 'pointer', 'pointer', 'pointer', 'pointer']],
+                    "_T0s4dumpxx_q_z2toSSSg4nameSi6indentSi8maxDepthSi0E5Itemsts16TextOutputStreamR_r0_lF": CC.indirectResultRegister === undefined ?
+                        // no special indirect result register: one more param for indirect result
+                        ['void', ['pointer', 'pointer', 'pointer', 'pointer', 'pointer', 'pointer', 'int', 'pointer', 'pointer', 'pointer', 'pointer', 'pointer', 'pointer']] :
+                        // indirect result register must be set by hook
+                        ['void', ['pointer', 'pointer', 'pointer', 'pointer', 'pointer', 'int', 'pointer', 'pointer', 'pointer', 'pointer', 'pointer', 'pointer']],
 
                 },
             }
