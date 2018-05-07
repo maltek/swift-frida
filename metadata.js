@@ -1102,7 +1102,7 @@ TargetExistentialTypeMetadata.prototype = Object.create(TargetMetadata.prototype
 
             // Get a pointer to tail-allocated storage for this metadata record.
             // The superclass immediately follows the list of protocol descriptors.
-            let ptr = this._ptr.add(Process.pointerSize * (3 + this.protocols.numProtocols));
+            let ptr = this._ptr.add(Process.pointerSize * (3 + this.protocols.length));
 
             return new TargetMetadata(Memory.readPointer(ptr));
         },
