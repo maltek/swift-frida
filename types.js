@@ -1,5 +1,6 @@
 const metadata = require('./metadata');
 const swiftValue = require('./swift-value');
+const mangling = require('./mangling');
 
 function strlen(pointer) {
     let i;
@@ -55,6 +56,7 @@ function Type(nominalType, canonicalType, name, accessFunction) {
         this.nominalType = canonicalType.getNominalTypeDescriptor();
         if (canonicalType.kind === "Class") {
             let clsType = canonicalType;
+            // ignore artificial subclasses
             while (this.nominalType === null && clsType.isTypeMetadata() && clsType.isArtificialSubclass() && clsType.superClass !== null) {
                 clsType = clsType.superClass;
                 this.nominalType = clsType.getNominalTypeDescriptor();
@@ -118,7 +120,7 @@ function Type(nominalType, canonicalType, name, accessFunction) {
                 cases.push({
                     tag: i - payloadCount,
                     name: names === null ? null : Memory.readUtf8String(names),
-                    type: type === null ? null : new Type(null, type),
+                    type: type === null ? null : new Type(null, type, `case ${i - payloadCount} of ${this}`),
                     indirect: (typeFlags & metadata.FieldTypeFlags.Indirect) === metadata.FieldTypeFlags.Indirect,
                     weak: (typeFlags & metadata.FieldTypeFlags.Weak) === metadata.FieldTypeFlags.Weak,
                 });
@@ -131,6 +133,7 @@ function Type(nominalType, canonicalType, name, accessFunction) {
         this.fields = function fields() {
             let results = [];
             let hierarchy = [canonicalType];
+            // TODO: use getParentType()
             while (hierarchy[hierarchy.length - 1].superClass) {
                 hierarchy.push(hierarchy[hierarchy.length - 1].superClass);
             }
@@ -152,10 +155,12 @@ function Type(nominalType, canonicalType, name, accessFunction) {
                 for (let j = 0; j < info.numFields; j++) {
                     let type = Memory.readPointer(fieldTypes.add(j * Process.pointerSize));
                     let typeFlags = type.and(metadata.FieldTypeFlags.typeMask);
-                    type = new metadata.TargetMetadata(type.and(~metadata.FieldTypeFlags.typeMask));
+                    type = new metadata.TargetMetadata(type.and(ptr(metadata.FieldTypeFlags.typeMask).not()));
                     let curOffset = Memory.readPointer(fieldOffsets.add(j * Process.pointerSize));
                     let fieldNameStr = Memory.readUtf8String(fieldName);
 
+                    let weak = (typeFlags & metadata.FieldTypeFlags.Weak) === metadata.FieldTypeFlags.Weak;
+                    let xtype = new Type(null, type, `?Unknown type of ${this}.${fieldNameStr}`);
                     results.push({
                         name: fieldNameStr,
                         offset: offset.add(curOffset),
@@ -167,65 +172,6 @@ function Type(nominalType, canonicalType, name, accessFunction) {
             }
             return results;
         };
-    }
-    if (canonicalType) {
-        switch (this.toString()) {
-            case "Swift.String":
-                this.fromJS = function (address, value) {
-                    // TODO: fromJS needs a parameter telling it whether it is initializing or assigning
-                    canonicalType.valueWitnessTable.destroy(address, canonicalType._ptr);
-                    let cStr = Memory.allocUtf8String(value);
-                    api.swift_stringFromUTF8InRawMemory(address, cStr, value.length);
-                    return true;
-                };
-            case "Swift.Bool":
-                this.toJS = function (address) { return Memory.readU8(address) !== 0; };
-                this.fromJS = function (address, value) { Memory.writeU8(address, value ? 1 : 0); return true; };
-                this.getSize = function getSize() { return 1; };
-                break;
-            case "Swift.UInt":
-                this.toJS = function(pointer) { return Memory.readULong(pointer); };
-                this.fromJS = function(pointer, value) { Memory.writeULong(pointer, value); return true; };
-                this.getSize = function() { return Process.pointerSize; };
-                break;
-            case "Swift.Int":
-                this.toJS = function(pointer) { return Memory.readLong(pointer); };
-                this.fromJS = function(pointer, value) { Memory.writeLong(pointer, value); return true; };
-                this.getSize = function() { return Process.pointerSize; };
-                break;
-            case "Swift.Int8":
-            case "Swift.Int16":
-            case "Swift.Int32":
-            case "Swift.Int64":
-            case "Swift.Int128":
-            case "Swift.Int256":
-            case "Swift.Int512":
-            case "Swift.UInt8":
-            case "Swift.UInt16":
-            case "Swift.UInt32":
-            case "Swift.UInt64":
-            case "Swift.UInt128":
-            case "Swift.UInt256":
-            case "Swift.UInt512":
-            case "Swift.RawPointer":
-                this.toJS = (pointer) => this.fields()[0].type.toJS(pointer);
-                this.fromJS = (pointer, value) => this.fields()[0].type.fromJS(pointer, value);
-                this.getSize = () => this.fields()[0].type.getSize();
-                break
-        }
-
-        Object.defineProperty(this, 'Type', {
-            enumerable: true,
-            get() {
-                let meta;
-                if (this.kind === "Existential" || this.kind === "ExistentialMetatype") {
-                    meta = Swift._api.swift_getExistentialMetatypeMetadata(canonicalType._ptr);
-                } else {
-                    meta = Swift._api.swift_getMetatypeMetadata(canonicalType._ptr);
-                }
-                return new Type(null, new metadata.TargetMetadata(meta), this.toString() + ".Type");
-            },
-        });
     }
     if (this.kind === "Existential" && canonicalType) {
         this.protocols = function protocols() {
@@ -413,6 +359,7 @@ function Type(nominalType, canonicalType, name, accessFunction) {
         };
     }
     if (canonicalType && this.kind === "Class") {
+        // TODO: use getParentType()
         this.superClass = function superClass() {
             let canon = canonicalType.superClass;
             if (canon === null)
@@ -431,7 +378,13 @@ function Type(nominalType, canonicalType, name, accessFunction) {
         this.getGenericParams = function getGenericParams() {
             if (!canonicalType.getGenericArgs)
                 throw new Error("generic arguments for this kind of type not implemented");
-            return canonicalType.getGenericArgs().map(t => t === null ? null : new Type(null, t));
+            return canonicalType.getGenericArgs().map(t => {
+                if (t === null)
+                    return null;
+                else {
+                    return new Type(null, t);
+                }
+            });
         };
     }
     if (this.kind === "ObjCClassWrapper") {
@@ -439,8 +392,15 @@ function Type(nominalType, canonicalType, name, accessFunction) {
             return ObjC.Object(canonicalType.class_);
         };
     }
+    if (["ExistentialMetatype", "Metatype"].indexOf(this.kind) !== -1) {
+        this.instanceType = function instanceType() {
+            return new Type(null, canonicalType.instanceType);
+        };
+    }
 
     if (canonicalType && ["Class", "Struct", "Enum"].indexOf(this.kind) !== -1) {
+        // TODO
+        // This allows you to define a method on this type.
         this.defineMethod = function defineMethod(address, name, type) {
             // TODO: mutating or normal method?
             if (type.kind !== "Function")
@@ -449,6 +409,67 @@ function Type(nominalType, canonicalType, name, accessFunction) {
                 'doesThrow': type.flags.doesThrow});
         };
         this._methods = new Map();
+    }
+
+    // due to the toString() this needs to happen last
+    if (canonicalType) {
+        switch (this.toString()) {
+            case "Swift.String":
+                this.fromJS = function (address, value) {
+                    // TODO: fromJS needs a parameter telling it whether it is initializing or assigning
+                    canonicalType.valueWitnessTable.destroy(address, canonicalType._ptr);
+                    let cStr = Memory.allocUtf8String(value);
+                    api.swift_stringFromUTF8InRawMemory(address, cStr, value.length);
+                    return true;
+                };
+            case "Swift.Bool":
+                this.toJS = function (address) { return Memory.readU8(address) !== 0; };
+                this.fromJS = function (address, value) { Memory.writeU8(address, value ? 1 : 0); return true; };
+                this.getSize = function getSize() { return 1; };
+                break;
+            case "Swift.UInt":
+                this.toJS = function(pointer) { return Memory.readULong(pointer); };
+                this.fromJS = function(pointer, value) { Memory.writeULong(pointer, value); return true; };
+                this.getSize = function() { return Process.pointerSize; };
+                break;
+            case "Swift.Int":
+                this.toJS = function(pointer) { return Memory.readLong(pointer); };
+                this.fromJS = function(pointer, value) { Memory.writeLong(pointer, value); return true; };
+                this.getSize = function() { return Process.pointerSize; };
+                break;
+            case "Swift.Int8":
+            case "Swift.Int16":
+            case "Swift.Int32":
+            case "Swift.Int64":
+            case "Swift.Int128":
+            case "Swift.Int256":
+            case "Swift.Int512":
+            case "Swift.UInt8":
+            case "Swift.UInt16":
+            case "Swift.UInt32":
+            case "Swift.UInt64":
+            case "Swift.UInt128":
+            case "Swift.UInt256":
+            case "Swift.UInt512":
+            case "Swift.RawPointer":
+                this.toJS = (pointer) => this.fields()[0].type.toJS(pointer);
+                this.fromJS = (pointer, value) => this.fields()[0].type.fromJS(pointer, value);
+                this.getSize = () => this.fields()[0].type.getSize();
+                break
+        }
+
+        Object.defineProperty(this, 'Type', {
+            enumerable: true,
+            get() {
+                let meta;
+                if (this.kind === "Existential" || this.kind === "ExistentialMetatype") {
+                    meta = Swift._api.swift_getExistentialMetatypeMetadata(canonicalType._ptr);
+                } else {
+                    meta = Swift._api.swift_getMetatypeMetadata(canonicalType._ptr);
+                }
+                return new Type(null, new metadata.TargetMetadata(meta), this.toString() + ".Type");
+            },
+        });
     }
 
     if (!this.isGeneric()) {
@@ -485,6 +506,44 @@ Type.prototype = {
                 this._name = str;
                 return str;
             }
+            switch (this.kind) {
+                case "Tuple":
+                    this._name = "(" + this.tupleElements().map(e =>
+                        (e.label === null ? "" : e.label + ": ") + e.type.toString()
+                    ).join(", ") + ")";
+                    return this._name;
+                case "Function":
+                    this._name = "(" + this.getArguments().map(a =>
+                        (a.inout ? "inout " : "") + a.type.toString()
+                    ).join(", ") + ") -> " + this.returnType().toString();
+                    return this._name;
+                case "ObjCClassWrapper":
+                    this._name = Memory.readUtf8String(ObjC.api.class_getName(this.canonicalType.class_));
+                    return this._name;
+                case "ExistentialMetatype":
+                case "Metatype":
+                    this._name = this.instanceType().toString() + ".Type";
+                    return this._name;
+                case "ForeignClass":
+                    this._name = Swift.demangle(mangling.MANGLING_PREFIX + "0" + this.canonicalType.name);
+                    return this._name;
+                case "Class":
+                    if (this.canonicalType.isPureObjC()) {
+                        this._name = Memory.readUtf8String(ObjC.api.class_getName(this.canonicalType._ptr));
+                        return this._name;
+                    }
+                    break;
+                case "Existential": {
+                    let protocols = this.canonicalType.protocols.map(p => Swift.isSwiftName(p.name) ?  Swift.demangle(p.name) : p.name);
+                    if (this.canonicalType.isClassBounded() && !this.canonicalType.getSuperclassConstraint())
+                        protocols.push("Swift.AnyObject");
+                    let str = protocols.join(" & ");
+                    if (this.canonicalType.getSuperclassConstraint())
+                        str += " : " + new Type(null, this.canonicalType.getSuperclassConstraint()).toString();
+                    this._name = str;
+                    return str;
+                }
+            }
         }
 
         if (this.nominalType) {
@@ -492,14 +551,19 @@ Type.prototype = {
             if (this.nominalType.genericParams.isGeneric()) {
                 let params = [];
                 if (this.canonicalType && "getGenericParams" in this) {
-                    params = this.getGenericParams().map(arg => arg.toString());
-                } else {
+                    try {
+                        params = this.getGenericParams().map(arg => arg.toString());
+                    } catch (e) {
+                        // TODO
+                    }
+                }
+                if (params.length === 0) {
                     if (this.nominalType.genericParams.flags.HasGenericParent) {
                         params.push("[inherited generic parameters]");
                     }
                     let cnt = this.nominalType.genericParams.numPrimaryParams;
                     for (let i = 0; i < cnt; i++) {
-                        params.push("_T" + i);
+                        params.push("_T" + i); // TODO
                     }
                 }
                 name +=  "<" + params.join(", ") + ">";
@@ -512,9 +576,9 @@ Type.prototype = {
             this._name = this.fixedName;
             return this.fixedName;
         }
-        this._name = "<<< invalid type >>>";
-        return "<<< invalid type >>>";
-        //throw new Error(`cannot get string representation for type without nominal or canonical type information`);
+        //this._name = "<<< invalid type >>>" + this.canonicalType + this.nominalType;
+        //return this._name;
+        throw new Error(`cannot get string representation for type without nominal or canonical type information`);
     },
 };
 
@@ -559,11 +623,13 @@ function findAllTypes(api) {
             let sectionSize = Memory.readULong(sizeAlloc);
             for (let i = 0; i < sectionSize; i += recordSizes[section]) {
                 let record;
+                let proto = null;
                 if (section === 0) {
                     record = new metadata.TargetTypeMetadataRecord(pointer.add(i));
                 } else {
                     record = new metadata.TargetProtocolConformanceRecord(pointer.add(i));
-                    addType(getOrMakeProtocolType(record.protocol));
+                    proto = getOrMakeProtocolType(record.protocol)
+                    addType(proto);
                 }
                 let nominalType = null;
                 if (record.getTypeKind() === metadata.TypeMetadataRecordKind.UniqueNominalTypeDescriptor)
@@ -574,7 +640,7 @@ function findAllTypes(api) {
                 if (nominalType || canonicalType) {
                     addType(new Type(nominalType, canonicalType));
                 } else {
-                    console.log(`metadata record without nominal or canonical type?! @${pointer.add(i)} of section ${section} in ${mod.name} ${record.getTypeKind()}`);
+                    console.log(`metadata record without nominal or canonical type?! @${pointer.add(i)} of section ${section} in ${mod.name} ${record.getTypeKind()} ${proto}`);
                 }
             }
         }
@@ -628,21 +694,25 @@ function findAllTypes(api) {
         typesByName.set("Swift.AnyObject.Type", AnyClass);
         typesByName.set("Swift.AnyClass", AnyClass);
     }
+    typesByName.set("()", Swift.makeTupleType([], []));
+    typesByName.set("Void", typesByName.get("()"));
 
     while (newTypes.length) {
         let type = newTypes.pop();
         if ('enumCases' in type)
-            type.enumCases().filter(i => i.type).forEach(i => addType(i.type));
+            type.enumCases().forEach(i => addType(i.type));
         if ('fields' in type)
-            type.fields().filter(i => i.type).forEach(i => addType(i.type));
+            type.fields().forEach(i => addType(i.type));
         if ('tupleElements' in type)
-            type.tupleElements().filter(i => i.type).forEach(i => addType(i.type));
+            type.tupleElements().forEach(i => addType(i.type));
         if ('getArguments' in type)
-            type.getArguments().filter(i => i.type).forEach(i => addType(i.type));
+            type.getArguments().forEach(i => addType(i.type));
         if ('returnType' in type)
             addType(type.returnType());
         if ('superClass' in type)
             addType(type.superClass());
+        if ('instanceType' in type)
+            addType(type.instanceType());
         if (type.kind === "Existential" && type.canonicalType) {
             for (let proto of type.canonicalType.protocols) {
                 addType(getOrMakeProtocolType(proto));
