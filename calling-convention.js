@@ -10,7 +10,7 @@ if (Process.arch === "arm64" && Process.platform === "darwin") {
         selfRegister: 'x20',
         errorRegister: 'x21',
         indirectResultRegister: 'x8',
-        maxInlineArgument: 128,
+        maxInlineArgument: 128, // TODO: the optional string arg for dump() is much larger and inline!
         maxInlineReturn: 4 * Process.pointerSize, // see shouldPassIndirectlyForSwift in swift-llvm/lib/CodeGen/TargetInfo.cpp
         firstArgRegister: 'x0',
         maxVoluntaryInt: Process.pointerSize,
@@ -52,17 +52,19 @@ function makeCallTrampoline(func, withError, self, indirectResult) {
         return {callAddr: func};
 
     let buf = Memory.alloc(Process.pageSize);
-    let wr, blx;
+    let wr, putBlxImm;
     if (Process.arch === "arm64") {
         wr = new Arm64Writer(buf);
-        blx = 'putBlImm';
+        putBlxImm = 'putBlImm';
     } else {
         wr = new ThumbWriter(buf);
-        blx = 'putBlxImm';
+        putBlxImm = 'putBlxImm';
     }
 
     if (withError)
         wr.putLdrRegAddress(convention.errorRegister, ptr(0));
+    // TODO: we should read the value for 'self' from a global/thread-local variable
+    // that way, we don't need to regenerate this function for every call
     if (self)
         wr.putLdrRegAddress(convention.selfRegister, self);
     if (indirectResult) {
@@ -71,9 +73,9 @@ function makeCallTrampoline(func, withError, self, indirectResult) {
         wr.putLdrRegAddress(convention.indirectResultRegister, indirectResult);
     }
 
-    wr[blx](func);
-
     if (withError) {
+        wr[putBlxImm](func);
+
         if (Process.arch === "arm64")
             wr.putTstRegImm(convention.errorRegister, ptr(0));
         else
@@ -84,9 +86,11 @@ function makeCallTrampoline(func, withError, self, indirectResult) {
 
         wr.putLabel('err_case')
         wr.putMovRegReg(convention.firstArgRegister, convention.errorRegister);
-        wr[blx](storeError);
+        wr[putBlxImm](storeError);
+        wr.putRet();
+    } else {
+        wr.putBImm(func);
     }
-    wr.putRet();
 
 
     wr.flush();
