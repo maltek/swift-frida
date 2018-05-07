@@ -103,7 +103,7 @@ Swift = module.exports = {
 
         for (let i = 0; i < args.length; i++) {
             let val;
-            if (args[i] instanceof Type)
+            if ("canonicalType" in args[i])
                 val = args[i].canonicalType._ptr;
             else {
                 val = args[i].type.canonicalType._ptr;

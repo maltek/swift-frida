@@ -1266,6 +1266,12 @@ const FunctionMetadataConvention = {
     Thin: 2,
     CFunctionPointer: 3,
 };
+const FunctionConventionStrings = [
+    "swift",
+    "block",
+    "thin",
+    "c"
+];
 
 function RelativeIndirectablePointer(addr) {
     let relativeOffsetPlusIndirect = Memory.readS32(addr);
@@ -1606,6 +1612,7 @@ module.exports = {
     TypeMetadataRecordKind,
     FieldTypeFlags,
     FunctionMetadataConvention,
+    FunctionConventionStrings,
     MetadataKind,
     OpaqueExistentialContainer,
     ClassExistentialContainer,

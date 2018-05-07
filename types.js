@@ -513,7 +513,7 @@ Type.prototype = {
                     ).join(", ") + ")";
                     return this._name;
                 case "Function":
-                    this._name = "(" + this.getArguments().map(a =>
+                    this._name = "@convention(" + metadata.FunctionConventionStrings[this.functionFlags().convention] + ") (" + this.getArguments().map(a =>
                         (a.inout ? "inout " : "") + a.type.toString()
                     ).join(", ") + ") -> " + this.returnType().toString();
                     return this._name;
