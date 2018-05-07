@@ -750,6 +750,12 @@ TargetClassMetadata.prototype = Object.create(TargetMetadata.prototype, {
         },
         enumerable: true,
     },
+    getGenericArgs: {
+        value() {
+            return this.getNominalTypeDescriptor().getGenericArgs(this);
+        },
+        enumerable: true,
+    },
 });
 function TargetValueMetadata(pointer) {
     this._ptr = pointer;
@@ -775,21 +781,7 @@ TargetValueMetadata.prototype = Object.create(TargetMetadata.prototype, {
 
     getGenericArgs: {
         value() {
-            let params = this.getNominalTypeDescriptor().genericParams;
-            let args = [];
-            if (params.hasGenericRequirements()) {
-                // the shift acts on signed 32bit numbers, like we need here
-                let offset = params.offset << Math.log2(Process.pointerSize);
-                for (let i = 0; i < params.numPrimaryParams; i++) {
-                    let ptr = Memory.readPointer(this._ptr.add(offset));
-                    if (ptr.isNull())
-                        args.push(null)
-                    else
-                        args.push(new TargetMetadata(ptr));
-                    offset += Process.pointerSize;
-                }
-            }
-            return args;
+            return this.getNominalTypeDescriptor().getGenericArgs(this);
         },
         enumerable: true,
     },
@@ -1445,6 +1437,23 @@ TargetNominalTypeDescriptor.prototype = {
 
     toString() {
         return "[TargetNominalType@" + this._ptr + ": " + this.mangledName + "]";
+    },
+    getGenericArgs(canon) {
+        let params = this.genericParams;
+        let args = [];
+        if (params.hasGenericRequirements()) {
+            // the shift acts on signed 32bit numbers, like we need here
+            let offset = params.offset << Math.log2(Process.pointerSize);
+            for (let i = 0; i < params.numPrimaryParams; i++) {
+                let ptr = Memory.readPointer(canon._ptr.add(offset));
+                if (ptr.isNull())
+                    args.push(null)
+                else
+                    args.push(new TargetMetadata(ptr));
+                offset += Process.pointerSize;
+            }
+        }
+        return args;
     },
 };
 

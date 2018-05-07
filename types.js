@@ -375,17 +375,17 @@ function Type(nominalType, canonicalType, name, accessFunction) {
         this.stride = canonicalType.valueWitnessTable.stride;
         this.valueFlags = canonicalType.valueWitnessTable.flags;
 
-        this.getGenericParams = function getGenericParams() {
-            if (!canonicalType.getGenericArgs)
-                throw new Error("generic arguments for this kind of type not implemented");
-            return canonicalType.getGenericArgs().map(t => {
-                if (t === null)
-                    return null;
-                else {
-                    return new Type(null, t);
-                }
-            });
-        };
+        if ("getGenericArgs" in canonicalType) {
+            this.getGenericParams = function getGenericParams() {
+                return canonicalType.getGenericArgs().map(t => {
+                    if (t === null)
+                        return null;
+                    else {
+                        return new Type(null, t);
+                    }
+                });
+            };
+        }
     }
     if (this.kind === "ObjCClassWrapper") {
         this.getObjCObject = function getObjCObject() {
@@ -550,14 +550,9 @@ Type.prototype = {
             let name = Swift.demangle(this.nominalType.mangledName);
             if (this.nominalType.genericParams.isGeneric()) {
                 let params = [];
-                if (this.canonicalType && "getGenericParams" in this) {
-                    try {
-                        params = this.getGenericParams().map(arg => arg.toString());
-                    } catch (e) {
-                        // TODO
-                    }
-                }
-                if (params.length === 0) {
+                if ("getGenericParams" in this) {
+                    params = this.getGenericParams().map(arg => arg.toString());
+                } else {
                     if (this.nominalType.genericParams.flags.HasGenericParent) {
                         params.push("[inherited generic parameters]");
                     }
