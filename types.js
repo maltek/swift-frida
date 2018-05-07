@@ -370,10 +370,11 @@ function Type(nominalType, canonicalType, name, accessFunction) {
     }
 
     if (canonicalType && (this.kind !== "Class" || canonicalType.isTypeMetadata())) {
-        let size = canonicalType.valueWitnessTable.size; // TODO: Swift doesn't count the static overhead of classes here
+        let size = Process.pointerSize; // TODO: Swift doesn't count the static overhead of classes here
+        if (canonicalType.valueWitnessTable.flags.IsNonInline)
+            size = canonicalType.valueWitnessTable.size;
+
         this.getSize = function() { return size };
-        this.stride = canonicalType.valueWitnessTable.stride;
-        this.valueFlags = canonicalType.valueWitnessTable.flags;
 
         if ("getGenericArgs" in canonicalType) {
             this.getGenericParams = function getGenericParams() {
