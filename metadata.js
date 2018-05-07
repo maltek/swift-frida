@@ -780,7 +780,7 @@ TargetValueMetadata.prototype = Object.create(TargetMetadata.prototype, {
             if (params.hasGenericRequirements()) {
                 // the shift acts on signed 32bit numbers, like we need here
                 let offset = params.offset << Math.log2(Process.pointerSize);
-                for (let i = 0; i < params.numGenericRequirements; i++) {
+                for (let i = 0; i < params.numPrimaryParams; i++) {
                     let ptr = Memory.readPointer(this._ptr.add(offset));
                     if (ptr.isNull())
                         args.push(null)
