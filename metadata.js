@@ -1299,7 +1299,7 @@ TargetNominalTypeDescriptor.prototype = {
     // offset 0
     get mangledName() {
         let addr = TargetRelativeDirectPointerRuntime(this._ptr, true);
-        return mangling.MANGLING_PREFIX + Memory.readUtf8String(addr);
+        return mangling.MANGLING_PREFIX + "0" + Memory.readUtf8String(addr);
     },
     // offset 4
     get clas() {
