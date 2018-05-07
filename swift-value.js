@@ -591,7 +591,7 @@ function makeWrapper(type, pointer, owned) {
         }
     }
 
-    if ('_methods' in type) {
+    /*if ('_methods' in type) {
         for (let [name, method] of type._methods.entries()) {
             Object.defineProperty(wrapperObject, name, {
                 enumerable: true,
@@ -600,7 +600,7 @@ function makeWrapper(type, pointer, owned) {
                 },
             });
         }
-    }
+    }*/
 
     let invalidateWrapper = function() {
         Object.keys(wrapperObject).forEach(key => Reflect.deleteProperty(wrapperObject, key));

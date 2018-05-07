@@ -398,8 +398,8 @@ function Type(nominalType, canonicalType, name, accessFunction) {
         };
     }
 
-    if (canonicalType && ["Class", "Struct", "Enum"].indexOf(this.kind) !== -1) {
-        // TODO
+    // TODO: implement me
+    /*if (canonicalType && ["Class", "Struct", "Enum"].indexOf(this.kind) !== -1) {
         // This allows you to define a method on this type.
         this.defineMethod = function defineMethod(address, name, type) {
             // TODO: mutating or normal method?
@@ -409,7 +409,7 @@ function Type(nominalType, canonicalType, name, accessFunction) {
                 'doesThrow': type.flags.doesThrow});
         };
         this._methods = new Map();
-    }
+    }*/
 
     // due to the toString() this needs to happen last
     if (canonicalType) {
@@ -558,7 +558,7 @@ Type.prototype = {
                     }
                     let cnt = this.nominalType.genericParams.numPrimaryParams;
                     for (let i = 0; i < cnt; i++) {
-                        params.push("_T" + i); // TODO
+                        params.push("_T" + i);
                     }
                 }
                 name +=  "<" + params.join(", ") + ">";
