@@ -21,13 +21,13 @@ Swift = module.exports = {
         return Module.findBaseAddress("libswiftCore.dylib") !== null;
     },
 
-    isSwiftName(func) {
-        let name = func.name || func;
+    isSwiftName(symbol) {
+        let name = symbol.name || symbol;
         return name.startsWith(mangling.MANGLING_PREFIX);
     },
 
     // like Interceptor.attach, but with type information, so you get nice wrappers around the Swift values
-    hook(target, callbacks, signature) {
+    /*hook(target, callbacks, signature) {
         let interceptorCallbacks = {};
         if ("onEnter" in callbacks) {
             interceptorCallbacks.onEnter = function(args) {
@@ -40,12 +40,12 @@ Swift = module.exports = {
             };
         }
         Interceptor.attach(target, interceptorCallbacks);
-    },
+    },*/
 
     _mangled: new Map(),
 
     // does not actually mangle the name, only has a lookup table with all names that have been demangled earlier
-    get_mangled(name) {
+    getMangled(name) {
         return this._mangled.get(name);
     },
 
@@ -97,7 +97,7 @@ Swift = module.exports = {
         if (flags && flags.doesThrow)
             writeFlags = writeFlags.or(ptr(metadata.TargetFunctionTypeFlags.ThrowsMask));
         if (flags && flags.convention)
-            writeFlags = writeFlags.or(ptr(flags.convention).shl(metadata.TargetFunctionTypeFlags.ConventionShift));
+            writeFlags = writeFlags.or(ptr(metadata.FunctionMetadataConvention[flags.convention] << metadata.TargetFunctionTypeFlags.ConventionShift));
 
         Memory.writePointer(data, writeFlags);
 
@@ -112,6 +112,8 @@ Swift = module.exports = {
             }
             Memory.writePointer(data.add((i + 1) * Process.pointerSize), val);
         }
+        if (returnType === null)
+            returnType = this.makeTupleType([], []); // Void
         Memory.writePointer(data.add((args.length + 1) * Process.pointerSize), returnType.canonicalType._ptr);
 
         let pointer = this._api.swift_getFunctionTypeMetadata(data);
