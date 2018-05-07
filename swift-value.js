@@ -30,6 +30,7 @@ if (dumpPtr && CC.indirectResultRegister !== undefined) {
 }
 
 function swiftToString(obj) {
+    // TODO: debug crash on 32bit
     let type = obj.$type;
     let pointer = obj.$pointer;
     /*
@@ -353,6 +354,7 @@ function makeWrapper(type, pointer, owned) {
 
     let staticType = type;
     if ("$kind" in type) { // an ObjC type
+        // TODO: check the `owned` variable
         return ObjC.Object(Memory.readPointer(pointer));
     }
 
@@ -439,6 +441,9 @@ function makeWrapper(type, pointer, owned) {
                         if (curCase.type === null)
                             return undefined;
 
+                        // TODO: Maybe we should copy the whole enum, and then remove the tag
+                        // instead of removing the tag, copying the payload, then adding the tag back.
+
                         let enumVwt = type.canonicalType.valueWitnessTable;
                         let payloadVwt = curCase.type.canonicalType.valueWitnessTable;
                         enumVwt.destructiveProjectEnumData(pointer, type.canonicalType._ptr);
@@ -453,6 +458,7 @@ function makeWrapper(type, pointer, owned) {
                     },
                 });
             }
+            // TODO: add a way to change current enum case + payload
         }
     }
 
@@ -481,9 +487,11 @@ function makeWrapper(type, pointer, owned) {
                             return null;
                         // weakLoadStrong() just incremented the strong reference count, undo that.
                         // If the user wants to keep this alive longer than right now, they need to manually increase
-                        // the reference count for such a variable for anything else, too.
+                        // the reference count for such a variable just like they'd have to for anything else.
+                        // TODO: we probably should register a finalizer and release things there instead.
                         Swift._api.swift_release(strong);
                         pointer = strong;
+                        // TODO: does this really work? I have a feeling we need to write this pointer to memory and pass that around.
                     }
 
                     if ("toJS" in field.type) {
@@ -535,7 +543,7 @@ function makeWrapper(type, pointer, owned) {
 
                 let cont = new metadata.OpaqueExistentialContainer(pointer);
                 let oldVwt = cont.type.canonicalType.valueWitnessTable;
-                // TODO: support ObjC values
+                // TODO: support assigning ObjC.Object
                 if (isClassType(cont.type))
                     Swift._api.swift_release(cont.heapObject);
                 else if(oldVwt.isValueInline)
@@ -559,9 +567,11 @@ function makeWrapper(type, pointer, owned) {
             Object.defineProperty(wrapperObject, cnt.toString(), {
                 enumerable: true,
                 get() {
+                    // TODO: call toJS() like struct/class fields
                     return elem.type(pointer.add(elem.offset));
                 },
                 set(val) {
+                    // TODO: call fromJS() like struct/class fields
                     wrapperObject[curCnt].$assignWithCopy(val);
                 },
             });
@@ -649,8 +659,9 @@ function makeSwiftValue(type) {
         throw new Error("the type of a value must have a canonical type descriptor!");
     }
 
-    let SwiftValue = function (pointer) {
-        return makeWrapper(type, pointer, false);
+    let SwiftValue;
+    SwiftValue = function (pointer) {
+        return makeWrapper(SwiftValue, pointer, false);
     };
     Reflect.defineProperty(SwiftValue, 'name', { value: type.toString() });
 
