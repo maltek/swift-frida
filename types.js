@@ -709,6 +709,8 @@ function findAllTypes(api) {
             addType(type.superClass());
         if ('instanceType' in type)
             addType(type.instanceType());
+        if ('getGenericParams' in type)
+            type.getGenericParams().forEach(addType);
         if (type.kind === "Existential" && type.canonicalType) {
             for (let proto of type.canonicalType.protocols) {
                 addType(getOrMakeProtocolType(proto));
