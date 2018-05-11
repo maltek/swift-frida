@@ -214,6 +214,13 @@ function Type(nominalType, canonicalType, name, accessFunction) {
             return new Type(null, new metadata.TargetMetadata(canon), names.join(" + "));
         };
         if (canonicalType.isClassBounded()) {
+            this.isClassBounded = true;
+            this.getSuperclassConstraint = function getSuperclassConstraint() {
+                let superClass = canonicalType.getSuperclassConstraint();
+                if (superClass)
+                    return new Type(null, superClass);
+                return null;
+            };
             this.withoutClassBound = function withoutClassBound() {
                 let protocols = canonicalType.protocols;
                 let canon = Swift._api.swift_getExistentialTypeMetadata(metadata.ProtocolClassConstraint.Any,
@@ -221,6 +228,7 @@ function Type(nominalType, canonicalType, name, accessFunction) {
                 return new Type(null, new metadata.TargetMetadata(canon));
             };
         } else {
+            this.isClassBounded = false;
             this.withClassBound = function withClassBound() {
                 let protocols = canonicalType.protocols;
                 let canon = Swift._api.swift_getExistentialTypeMetadata(metadata.ProtocolClassConstraint.Class,
@@ -228,7 +236,10 @@ function Type(nominalType, canonicalType, name, accessFunction) {
                 return new Type(null, new metadata.TargetMetadata(canon));
             };
         }
-        if (!canonicalType.isObjC()) {
+        if (canonicalType.isObjC()) {
+            this.isObjC = true;
+        } else {
+            this.isObjC = false;
             if (canonicalType.getSuperclassConstraint()) {
                 this.withoutSuperclassConstraint = function withoutSuperclassConstraint() {
                     let protocols = canonicalType.protocols;
@@ -536,8 +547,6 @@ Type.prototype = {
                     break;
                 case "Existential": {
                     let protocols = this.canonicalType.protocols.map(p => Swift.isSwiftName(p.name) ?  Swift.demangle(p.name) : p.name);
-                    if (this.canonicalType.isClassBounded() && !this.canonicalType.getSuperclassConstraint())
-                        protocols.push("Swift.AnyObject");
                     let str = protocols.join(" & ");
                     if (this.canonicalType.getSuperclassConstraint())
                         str += " : " + new Type(null, this.canonicalType.getSuperclassConstraint()).toString();
@@ -711,6 +720,8 @@ function findAllTypes(api) {
             addType(type.instanceType());
         if ('getGenericParams' in type)
             type.getGenericParams().forEach(addType);
+        if ('getSuperclassConstraint' in type)
+            addType(type.getSuperclassConstraint());
         if (type.kind === "Existential" && type.canonicalType) {
             for (let proto of type.canonicalType.protocols) {
                 addType(getOrMakeProtocolType(proto));
@@ -718,8 +729,6 @@ function findAllTypes(api) {
                     addType(getOrMakeProtocolType(inherited));
                 }
             }
-            if (type.canonicalType.getSuperclassConstraint())
-                addType(new Type(null, type.canonicalType.getSuperclassConstraint()));
         }
     }
 
