@@ -31,24 +31,27 @@ def recv(message, data):
 def top_sort(dag):
     empty = set()
     no_incoming = set(dag.keys())
+    # we need to be able to query incoming edges
     rev_dag = {}
     for source_node, target_nodes in dag.items():
         for target_node in target_nodes:
             no_incoming.discard(target_node)
             rev_dag.setdefault(target_node, set()).add(source_node)
     while no_incoming:
+        # pick a node without incoming edges
         node = no_incoming.pop()
         yield node
+        # remove the node from the graph, add dependents to no_incoming
         for target_node in list(dag.get(node, [])):
-            rev_dag[target_node].remove(node)
             dag[node].remove(target_node)
             if not dag[node]:
                 del dag[node]
+            rev_dag[target_node].remove(node)
             if not rev_dag[target_node]:
                 del rev_dag[target_node]
                 no_incoming.add(target_node)
 
-    assert not rev_dag
+    assert not rev_dag, "graph is not a DAG"
 
 
 
