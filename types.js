@@ -547,7 +547,9 @@ Type.prototype = {
                     break;
                 case "Existential": {
                     let protocols = this.canonicalType.protocols.map(p => Swift.isSwiftName(p.name) ?  Swift.demangle(p.name) : p.name);
-                    let str = protocols.join(" & ");
+                    if (this.isClassBounded)
+                        protocols.push("Swift.AnyObject");
+                    let str = protocols.length ? protocols.join(" & ") : "Any";
                     if (this.canonicalType.getSuperclassConstraint())
                         str += " : " + new Type(null, this.canonicalType.getSuperclassConstraint()).toString();
                     this._name = str;
