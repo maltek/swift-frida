@@ -346,6 +346,47 @@ function escapeName(name, obj) {
     }
     return obj;
 }
+function defineMember(wrapperObject, description, name, getAddr) {
+    Object.defineProperty(wrapperObject, name, {
+        enumerable: true,
+        get() {
+            let addr = getAddr();
+            let pointer = addr;
+            if (description.weak) {
+                let strong = Swift._api.swift_weakLoadStrong(addr);
+                if (strong.isNull())
+                    return null;
+                // weakLoadStrong() just incremented the strong reference count, undo that.
+                // If the user wants to keep this alive longer than right now, they need to manually increase
+                // the reference count for such a variable just like they'd have to for anything else.
+                // TODO: we probably should register a finalizer and release things there instead.
+                Swift._api.swift_release(strong);
+                pointer = strong;
+                // TODO: does this really work? I have a feeling we need to write this pointer to memory and pass that around.
+            }
+
+            if ("toJS" in description.type) {
+                let val = description.type.toJS(pointer);
+                if (val !== undefined)
+                    return val;
+            }
+            return new description.type(pointer);
+        },
+        set(newVal) {
+            let addr = getAddr();
+            if (description.weak) {
+                Swift._api.swift_weakAssign(addr, newVal.$pointer);
+            } else {
+                let assigned = false;
+                if ("fromJS" in description.type && !("$pointer" in newVal))
+                    assigned = description.type.fromJS(pointer, newVal);
+                if (!assigned) {
+                    type.valueWitnessTable.assignWithCopy(addr, newVal.$pointer, newVal.$type.canonicalType._ptr);
+                }
+            }
+        },
+    });
+}
 
 function makeWrapper(type, pointer, owned) {
     if (!pointer || pointer.isNull()) {
@@ -474,47 +515,8 @@ function makeWrapper(type, pointer, owned) {
                 }
                 return addr;
             };
-            let fieldName = escapeName(field.name, wrapperObject);
-
-            Object.defineProperty(wrapperObject, fieldName, {
-                enumerable: true,
-                get() {
-                    let addr = getAddr();
-                    let pointer = addr;
-                    if (field.weak) {
-                        let strong = Swift._api.swift_weakLoadStrong(addr);
-                        if (strong.isNull())
-                            return null;
-                        // weakLoadStrong() just incremented the strong reference count, undo that.
-                        // If the user wants to keep this alive longer than right now, they need to manually increase
-                        // the reference count for such a variable just like they'd have to for anything else.
-                        // TODO: we probably should register a finalizer and release things there instead.
-                        Swift._api.swift_release(strong);
-                        pointer = strong;
-                        // TODO: does this really work? I have a feeling we need to write this pointer to memory and pass that around.
-                    }
-
-                    if ("toJS" in field.type) {
-                        let val = field.type.toJS(pointer);
-                        if (val !== undefined)
-                            return val;
-                    }
-                    return new field.type(pointer);
-                },
-                set(newVal) {
-                    let addr = getAddr();
-                    if (field.weak) {
-                        Swift._api.swift_weakAssign(addr, newVal.$pointer);
-                    } else {
-                        let assigned = false;
-                        if ("fromJS" in field.type && !("$pointer" in newVal))
-                            assigned = field.type.fromJS(pointer, newVal);
-                        if (!assigned) {
-                            type.valueWitnessTable.assignWithCopy(addr, newVal.$pointer, newVal.$type.canonicalType._ptr);
-                        }
-                    }
-                },
-            });
+            let memberName = escapeName(field.name, wrapperObject);
+            defineMember(wrapperObject, field, memberName, getAddr);
         }
     }
 
@@ -564,23 +566,10 @@ function makeWrapper(type, pointer, owned) {
     if ("tupleElements" in type) {
         let cnt = 0;
         for (let elem of type.tupleElements()) {
-            Object.defineProperty(wrapperObject, cnt.toString(), {
-                enumerable: true,
-                get() {
-                    // TODO: call toJS() like struct/class fields
-                    return elem.type(pointer.add(elem.offset));
-                },
-                set(val) {
-                    // TODO: call fromJS() like struct/class fields
-                    wrapperObject[curCnt].$assignWithCopy(val);
-                },
-            });
-            cnt++;
-        }
-        cnt = 0;
-        for (let elem of type.tupleElements()) {
-            let curCnt = cnt;
+            defineMember(wrapperObject, elem, cnt.toString(), () => pointer.add(elem.offset));
+
             if (elem.label !== null) {
+                let curCnt = cnt;
                 Object.defineProperty(wrapperObject, escapeName(elem.label, wrapperObject), {
                     enumerable: true,
                     get() { return wrapperObject[curCnt]; },
