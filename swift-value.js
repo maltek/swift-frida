@@ -22,7 +22,7 @@ if (dumpPtr && CC.indirectResultRegister !== undefined) {
     Interceptor.attach(dumpPtr, {
         onEnter: function() {
             if (indirectResults.has(this.threadId)) {
-                this.context[CC.indirectResultRegister] = indirectResults.get(this.threadId)[1];
+                this.context[CC.indirectResultRegister] = indirectResults.get(this.threadId);
                 indirectResults.delete(this.threadId)
             }
         },
@@ -78,9 +78,10 @@ function swiftToString(obj) {
     Memory.writePointer(stringResult.add(Process.pointerSize), ptr(0));
     Memory.writePointer(stringResult.add(2*Process.pointerSize), ptr(0));
 
+    let threadId = Process.getCurrentThreadId();
 
     let textOutputStreamWitnessTableForString = Swift._api._T0SSs16TextOutputStreamsWP;
-    let Any = Swift._api.swift_getExistentialTypeMetadata(1, ptr(0), 0, ptr(0));
+    let Any = Swift._api.swift_getExistentialTypeMetadata(metadata.ProtocolClassConstraint.Any, ptr(0), 0, ptr(0));
 
     let dump = Swift._api._T0s4dumpxx_q_z2toSSSg4nameSi6indentSi8maxDepthSi0E5Itemsts16TextOutputStreamR_r0_lF;
 
@@ -116,7 +117,6 @@ function swiftToString(obj) {
 
     let witnessTableStringProtocol = Swift._api._T0SSs14StringProtocolsWP;
     let listener;
-    let threadId = Process.getCurrentThreadId();
     let toCString = new NativeFunction(toCStringPtr, 'pointer', ['pointer', 'pointer', 'pointer']);
 
     selfPointers.set(threadId, stringResult);
