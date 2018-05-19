@@ -27,7 +27,7 @@
     "type": "git",
     "url": "git+https://github.com/maltek/swift-frida.git"
   },
-  "license": "LGPL-2.0 WITH WxWindows-exception-3.1",
+  "license": "LGPL-3.0 WITH WxWindows-exception-3.1",
   "bugs": {
     "url": "https://github.com/frida/frida-objc/issues"
   },

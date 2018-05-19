@@ -76,3 +76,11 @@ Then, you can just run Frida interactively, with the Swift module loaded:
 
 You can now play with the functions of the `Swift` object.  (After making a change to a file in this repo, use `%reload` to reload the Swift script after recompiling.)
 
+
+## License
+Code in `metadata.js` is based on Apache-2.0 licensed Swift compiler source code.
+Code in `index.js` is based on wxWindows-3.1 licensed frida-objc source code.
+
+The compatible intersection of those licenses is LGPL-3.0 (or later) with
+wxWindows exceptions. So that's also the license terms under which we release
+the original code in this repository.
