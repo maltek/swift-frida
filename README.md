@@ -16,7 +16,7 @@ Right now, the following functions are available in the `Swift` namespace, when 
  * `available` Allows you to check if the current process uses Swift. Don't use any of the other functions here if this property is `false`.
  * `isSwiftName(name)` Takes a function/symbol name (like you can get from `Module` objects), and returns a boolean indicating whether it is a mangled Swift name or not.
  * `demangle(name)` Takes a mangled Swift name (like you can get from `Module` objects), and returns a demangled, human-readable String for it.
- * `get_mangled(name)` The opposite of `demangle(name)`. Right now, this only works for names that were previously returned by `demangle(name)`.
+ * `getMangled(name)` The opposite of `demangle(name)`. Right now, this only works for names that were previously returned by `demangle(name)`.
  * `_api` This is an object providing access to many low-level functions in the Swift runtime.
  * `_typeFromCanonical(metadata)` This function allows you to create a `Type` constructor from a low-level `Metadata*`.
  * `_typesByName` A `Map` storing all the types found by the last invocation of `enumerateTypesSync()`, with their names as keys.
