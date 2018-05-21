@@ -521,6 +521,7 @@ function makeWrapper(type, pointer, owned) {
     }
 
     if (type.kind === "Existential" && type.canonicalType.getRepresentation() === "Opaque") {
+        // TODO: read access to the witness tables
         Object.defineProperty(wrapperObject, '$value', {
             enumerable: true,
             get() {
@@ -542,6 +543,7 @@ function makeWrapper(type, pointer, owned) {
                         throw new Error(`this value does not implement the required protocol '${proto.name}'`);
                     witnesses.push(conformance);
                 }
+                // TODO: verify class and superclass bounds
 
                 let cont = new metadata.OpaqueExistentialContainer(pointer);
                 let oldVwt = cont.type.canonicalType.valueWitnessTable;

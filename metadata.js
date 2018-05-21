@@ -752,6 +752,9 @@ TargetClassMetadata.prototype = Object.create(TargetMetadata.prototype, {
     },
     getGenericArgs: {
         value() {
+            if (this.isPureObjC())
+                return [];
+            // TODO: also use nominal type of superclasses
             return this.getNominalTypeDescriptor().getGenericArgs(this);
         },
         enumerable: true,
@@ -1396,10 +1399,6 @@ TargetNominalTypeDescriptor.prototype = {
 
     getKind() {
         return NominalTypeKind[this.genericMetadataPatternAndKind.intVal];
-    },
-
-    offsetToNameOffset() {
-        return 0;
     },
 
     // offset 28
