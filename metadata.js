@@ -552,7 +552,7 @@ TargetMetadata.prototype = {
 
     get kind() {
         let val = Memory.readPointer(this._ptr);
-        if (val.compare(ptr(4096)) > 0) {
+        if (val.compare(ptr(4096)) >= 0) {
             return "Class";
         }
         return MetadataKind[val.toInt32().toString()];
