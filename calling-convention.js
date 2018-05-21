@@ -37,13 +37,13 @@ if (Process.arch === "arm64" && Process.platform === "darwin") {
 
 let errors = new Map();
 
-let storeError = new NativeCallback(function storeError() {
-    errors.set(Process.getCurrentThreadId(), callStack);
+let storeError = new NativeCallback(function storeError(error) {
+    errors.set(Process.getCurrentThreadId(), error);
 }, 'void', ['pointer']);
 function checkTrampolineError() {
     let id = Process.getCurrentThreadId();
-    let val = errors.get(id, callStack);
-    errors.remove(id);
+    let val = errors.get(id);
+    errors.delete(id);
     return val;
 }
 
@@ -61,12 +61,15 @@ function makeCallTrampoline(func, withError, self, indirectResult) {
         putBlxImm = 'putBlxImm';
     }
 
+    // initialize error register to 0 (no error)
     if (withError)
         wr.putLdrRegAddress(convention.errorRegister, ptr(0));
     // TODO: we should read the value for 'self' from a global/thread-local variable
     // that way, we don't need to regenerate this function for every call
+    // set self register to self
     if (self)
         wr.putLdrRegAddress(convention.selfRegister, self);
+    // set the indirect result register to pre-allocated memory region
     if (indirectResult) {
         if (!convention.indirectResultRegister)
             throw new Error("only provide the indirect result pointer on platforms with a specific register for it!");
@@ -74,21 +77,28 @@ function makeCallTrampoline(func, withError, self, indirectResult) {
     }
 
     if (withError) {
+        // generate call to actual function
         wr[putBlxImm](func);
 
+        // check if function return error
         if (Process.arch === "arm64")
             wr.putTstRegImm(convention.errorRegister, ptr(0));
         else
             wr.putCmpRegImm(convention.errorRegister, ptr(0));
 
+        // skip return if error has occurred
         wr.putBCondLabel('ne', 'err_case')
-        wr.putRet(); // return if no error
-
-        wr.putLabel('err_case')
-        wr.putMovRegReg(convention.firstArgRegister, convention.errorRegister);
-        wr[putBlxImm](storeError);
+        // return if no error
         wr.putRet();
+
+        // error has occured!
+        wr.putLabel('err_case')
+        // move error value to first argument
+        wr.putMovRegReg(convention.firstArgRegister, convention.errorRegister);
+        // tail call to JS function that stores the error value
+        wr.putBImm(storeError);
     } else {
+        // tail call to actual function
         wr.putBImm(func);
     }
 
@@ -101,7 +111,7 @@ function makeCallTrampoline(func, withError, self, indirectResult) {
     if (Process.arch === "arm64")
         callAddr = buf;
     else
-        callAddr = buf.or(ptr(1))
+        callAddr = buf.or(ptr(1)); // THUMB
     return {
         'callAddr': callAddr,
         '_buf': buf,
