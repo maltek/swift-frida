@@ -240,7 +240,7 @@ function Type(nominalType, canonicalType, name, accessFunction) {
             this.isObjC = true;
         } else {
             this.isObjC = false;
-            if (canonicalType.getSuperclassConstraint()) {
+            if ('getSuperclassConstraint' in this && this.getSuperclassConstraint()) {
                 this.withoutSuperclassConstraint = function withoutSuperclassConstraint() {
                     let protocols = canonicalType.protocols;
                     let canon = Swift._api.swift_getExistentialTypeMetadata(metadata.ProtocolClassConstraint.Class,
@@ -381,11 +381,10 @@ function Type(nominalType, canonicalType, name, accessFunction) {
     }
 
     if (canonicalType && (this.kind !== "Class" || canonicalType.isTypeMetadata())) {
-        let size = Process.pointerSize; // TODO: Swift doesn't count the static overhead of classes here
-        if (canonicalType.valueWitnessTable.flags.IsNonInline)
-            size = canonicalType.valueWitnessTable.size;
-
-        this.getSize = function() { return size };
+        if (!("getSize" in this)) {
+            let size = canonicalType.valueWitnessTable.size;
+            this.getSize = function() { return size };
+        }
 
         if ("getGenericArgs" in canonicalType) {
             this.getGenericParams = function getGenericParams() {
