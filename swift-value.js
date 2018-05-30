@@ -415,33 +415,8 @@ function makeWrapper(type, pointer, owned) {
             Object.defineProperty(wrapperObject, '$enumCase', {
                 enumerable: true,
                 get() {
-                    let tag;
-                    if (numPayloads === 0) {
-                        // a C-like enum: an integer just large enough to represent all cases
-                        if (enumCases.length < (1 << 8))
-                            tag = Memory.readU8(pointer);
-                        else if (enumCases.length < (1 << 16))
-                            tag = Memory.readU16(pointer);
-                        else if (enumCases.length < (1 << 32))
-                            tag = Memory.readU32(pointer);
-                        else if (enumCases.length < (1 << 64))
-                            tag = Memory.readU64(pointer);
-                        else
-                            throw new Error("impossibly large number of enum cases");
-                    } else if (numPayloads === 1) {
-                        // single-payload enum: tag is after the value, or in spare bits if available
-                        let opaqueVal = pointer;
-                        let payloadType = enumCases[0].type.canonicalType._ptr;
-                        tag = Swift._api.swift_getEnumCaseSinglePayload(opaqueVal, payloadType, enumCases.length - numPayloads);
-                    } else {
-                        // multi-payload enum:
-                        // - all non-payload cases are collapsed into a single tag, secondary tag to
-                        //   differentiate them is stored in place of value
-                        // - tag is stored in spare bits shared by all values
-                        // - all remaining bits of tag (that don't fit in spare bits) are appended to the value
-                        let opaqueVal = pointer;
-                        tag = Swift._api.swift_getEnumCaseMultiPayload(opaqueVal, type.nominalType._ptr);
-                    }
+                    let opaqueVal = pointer;
+                    let tag = type.canonicalType.valueWitnessTable.getEnumTag(opaqueVal, type.canonicalType._ptr);
                     // tag is in range [-ElementsWithPayload..ElementsWithNoPayload-1]
                     // but we want an index into the array returned by enumCases()
                     return tag + numPayloads;
@@ -455,24 +430,66 @@ function makeWrapper(type, pointer, owned) {
                         if (curCase.type === null)
                             return undefined;
 
-                        // TODO: Maybe we should copy the whole enum, and then remove the tag
-                        // instead of removing the tag, copying the payload, then adding the tag back.
-
                         let enumVwt = type.canonicalType.valueWitnessTable;
-                        let payloadVwt = curCase.type.canonicalType.valueWitnessTable;
-                        enumVwt.destructiveProjectEnumData(pointer, type.canonicalType._ptr);
 
-                        let payload = Memory.alloc(payloadVwt.size.toInt32());
-                        let address = curCase.indirect ? Swift._api.swift_projectBox(pointer) : pointer;
-                        payloadVwt.initializeWithCopy(payload, pointer, curCase.type.canonicalType._ptr);
+                        // we copy the whole enum, and then remove the tag
+                        let payload = Memory.alloc(enumVwt.size.toInt32());
+                        enumVwt.initializeWithCopy(payload, pointer, type.canonicalType._ptr);
+                        enumVwt.destructiveProjectEnumData(payload, type.canonicalType._ptr);
 
-                        enumVwt.destructiveInjectEnumTag(pointer, curCase.tag, type.canonicalType._ptr);
+                        let owned = true;
+                        if (curCase.indirect) {
+                            let payloadCanon = curCase.type.canonicalType;
+                            let buf = Memory.alloc(payloadCanon.valueWitnessTable.size.toInt32());
+                            payloadVwt.initalizeWithTake(buf, Memory.readPointer(payload), payloadCanon._ptr);
+                            payload = buf;
+                        } else if (curCase.weak) {
+                            // TODO: document that we're returning the reference to the existing value
+                            let strong = Swift._api.swift_weakLoadStrong(payload);
+                            if (strong.isNull())
+                                return null;
+                            payload = buf;
+                            owned = false;
+                        }
 
-                        return makeWrapper(curCase.type, payload, true);
+                        return makeWrapper(curCase.type, payload, owned);
                     },
                 });
             }
-            // TODO: add a way to change current enum case + payload
+            Object.defineProperty(wrapperObject, '$setTo', {
+                    enumerable: true,
+                    value(caseObj, payloadValue) {
+                        if (typeof caseObj === "number")
+                            caseObj = enumCases[caseObj];
+                        if (caseObj && enumCases.indexOf(caseObj) === -1) {
+                            throw new Error(`invalid case tag ${caseObj.name} for $setTo on ${type}`);
+                        }
+
+                        let newCase = caseObj;
+                        if (newCase.type && (payloadValue === null || payloadValue === undefined))
+                            throw new Error(`$setTo called without a payload, but case '${newCase.name}' requires it`);
+                        if (!newCase.type && payloadValue !== null && payloadValue !== undefined)
+                            throw new Error(`$setTo called with a payload, but case '${newCase.name}' has none`);
+
+                        let enumVwt = type.canonicalType.valueWitnessTable;
+                        enumVwt.destroy(pointer, type.canonicalType._ptr);
+
+                        if (newCase.type) {
+                            let newCanon = newCase.type.canonicalType;
+                            if (newCase.weak) {
+                                // TODO: document that we're assigning the existing reference
+                                Swift._api.swift_weakInit(payload, payloadValue.$pointer);
+                            } else if (newCase.indirect) {
+                                let box = Swift._api.swift_allocBox(newCase.type.canonicalType._ptr)[1];
+                                newCanon.valueWitnessTable.initializeWithCopy(box, payloadValue.$pointer, newCanon._ptr);
+                                Memory.writePointer(pointer, box);
+                            } else {
+                                newCanon.valueWitnessTable.initializeWithCopy(pointer, payloadValue.$pointer, newCanon._ptr);
+                            }
+                        }
+                        enumVwt.destructiveInjectEnumTag(pointer, caseObj.tag, type.canonicalType._ptr);
+                    },
+            });
         }
     }
 

@@ -101,7 +101,11 @@ function Type(nominalType, canonicalType, name, accessFunction) {
         };
     }
     if (this.nominalType && canonicalType && (this.kind === "Enum" || this.kind === "Optional")) {
+        let cached = null;
         this.enumCases = function enumCases() {
+            if (cached)
+                return cached;
+
             let info = this.nominalType.enum_;
             let count = info.getNumCases();
             let payloadCount = info.getNumPayloadCases();
@@ -126,6 +130,7 @@ function Type(nominalType, canonicalType, name, accessFunction) {
                 });
                 names = names === null ? null : names.add(strlen(names) + 1);
             }
+            cached = cases;
             return cases;
         };
     }
