@@ -1,36 +1,7 @@
 const metadata = require('./metadata');
 const {convention: CC, makeCallTrampoline, checkTrampolineError, convertToCParams} = require('./calling-convention');
 
-let selfPointers = new Map();
-// We need to hook this function at startup, because hooking it seems to happen asynchronously
-// (maybe because this is basically self-modifying code?) and we don't want to run into race-conditions.
-let toCStringPtr = Module.findExportByName("libswiftFoundation.dylib", "_T0s14StringProtocolP10FoundationsAARzSS5IndexVADRtzlE01cA0Says4Int8VGSgSSACE8EncodingV5using_tF");
-if (toCStringPtr) {
-    Interceptor.attach(toCStringPtr, {
-        onEnter: function() {
-            if (selfPointers.has(this.threadId)) {
-                this.context[CC.selfRegister] = selfPointers.get(this.threadId);
-                selfPointers.delete(this.threadId)
-            }
-        },
-    });
-}
-let dumpPtr = Module.findExportByName("libswiftCore.dylib", "_T0s4dumpxx_q_z2toSSSg4nameSi6indentSi8maxDepthSi0E5Itemsts16TextOutputStreamR_r0_lF");
-let indirectResults;
-if (dumpPtr && CC.indirectResultRegister !== undefined) {
-    indirectResults = new Map();
-    Interceptor.attach(dumpPtr, {
-        onEnter: function() {
-            if (indirectResults.has(this.threadId)) {
-                this.context[CC.indirectResultRegister] = indirectResults.get(this.threadId);
-                indirectResults.delete(this.threadId)
-            }
-        },
-    });
-}
-
 function swiftToString(obj) {
-    // TODO: debug crash on 32bit
     let type = obj.$type;
     let pointer = obj.$pointer;
     /*
@@ -100,12 +71,13 @@ function swiftToString(obj) {
         /*static type of `to`*/ SwiftString.canonicalType._ptr,
         /*how to use `to` as a TextOutputStream*/ textOutputStreamWitnessTableForString
     ];
+    let trampoline;
     if (CC.indirectResultRegister === undefined) {
         // indirect return value is just another parameter
         params.unshift(returnAlloc);
     } else {
-        // indirect return value is set by the installed hook
-        indirectResults.set(threadId, returnAlloc)
+        trampoline = makeCallTrampoline(dump, false, null, returnAlloc);
+        dump = new NativeFunction(trampoline.callAddr, 'void', ['pointer', 'pointer', 'pointer', 'pointer', 'pointer', 'int', 'pointer', 'pointer', 'pointer', 'pointer', 'pointer', 'pointer']);
     }
 
     dump.apply(null, params);
@@ -117,9 +89,10 @@ function swiftToString(obj) {
 
     let witnessTableStringProtocol = Swift._api._T0SSs14StringProtocolsWP;
     let listener;
-    let toCString = new NativeFunction(toCStringPtr, 'pointer', ['pointer', 'pointer', 'pointer']);
+    let toCStringPtr = Module.findExportByName("libswiftFoundation.dylib", "_T0s14StringProtocolP10FoundationsAARzSS5IndexVADRtzlE01cA0Says4Int8VGSgSSACE8EncodingV5using_tF");
+    trampoline = makeCallTrampoline(toCStringPtr, false, stringResult, null);
+    let toCString = new NativeFunction(trampoline.callAddr, 'pointer', ['pointer', 'pointer', 'pointer']);
 
-    selfPointers.set(threadId, stringResult);
     let array = toCString(encoding, SwiftString.canonicalType._ptr, witnessTableStringProtocol);
 
     // the `BridgeObject` this `[CChar]?` contains somewhere deep down is Opaque, so we can't use type

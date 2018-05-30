@@ -13,6 +13,7 @@ if (Process.arch === "arm64" && Process.platform === "darwin") {
         maxInlineArgument: 128, // TODO: the optional string arg for dump() is much larger and inline!
         maxInlineReturn: 4 * Process.pointerSize, // see shouldPassIndirectlyForSwift in swift-llvm/lib/CodeGen/TargetInfo.cpp
         firstArgRegister: 'x0',
+        intraProcedureScratch: 'x16',
         maxVoluntaryInt: Process.pointerSize,
         maxInt: 8,
         maxIntAlignment: 8,
@@ -26,6 +27,7 @@ if (Process.arch === "arm64" && Process.platform === "darwin") {
         maxInlineArgument: 64, // TODO: watchOS uses 128
         maxInlineReturn: 4 * Process.pointerSize, // see shouldPassIndirectlyForSwift in swift-llvm/lib/CodeGen/TargetInfo.cpp
         firstArgRegister: 'r0',
+        intraProcedureScratch: 'r12',
         maxVoluntaryInt: Process.pointerSize,
         maxInt: 8,
         maxIntAlignment: 4,
@@ -99,9 +101,13 @@ function makeCallTrampoline(func, withError, self, indirectResult) {
         wr.putBImm(storeError);
     } else {
         // tail call to actual function
-        wr.putBImm(func);
+        if ('putBranchAddress' in wr) {
+            wr.putBranchAddress(func);
+        } else {
+            wr.putLdrRegAddress(convention.intraProcedureScratch, func)
+            wr.putBxReg(convention.intraProcedureScratch);
+        }
     }
-
 
     wr.flush();
     wr.dispose();

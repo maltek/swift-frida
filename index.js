@@ -186,11 +186,12 @@ Swift = module.exports = {
                     'swift_bridgeObjectRelease': ['void', ['pointer']],
                     'swift_weakLoadStrong': ['pointer', ['pointer']],
                     'swift_weakAssign': ['void', ['pointer', 'pointer']],
+                    'swift_weakInit': ['void', ['pointer', 'pointer']],
                     'swift_release': ['void', ['pointer']],
                     'swift_retain': ['void', ['pointer']],
 
                     //'swift_allocObject': ['pointer', ['pointer', size_t, size_t]],
-                    //'swift_allocBox': [['pointer', 'pointer'], ['pointer']],
+                    'swift_allocBox': [['pointer', 'pointer'], ['pointer']],
                     //'swift_deallocBox': ['void', ['pointer']],
                     'swift_projectBox': ['pointer', ['pointer']],
                     'swift_stringFromUTF8InRawMemory': ['void', ['pointer', 'pointer', size_t]],
