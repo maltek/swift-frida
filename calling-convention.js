@@ -148,10 +148,11 @@ function semanticLowering(signature) {
         addArg(swiftArgs[i].type, indirect, args, indirect ? "keep" : "transfer", isSelf ? "self" : null);
     }
 
+    const types = require('./types');
     let rets = [];
     addArg(signature.returnType, false, "return_take", rets, null);
     if (signature.flags.doesThrow) {
-        addArg(Swift._typesByName.get("Swift.Error"), true, "return_take", rets, "error");
+        addArg(types.typesByName.get("Swift.Error"), true, "return_take", rets, "error");
     }
 
     return { args, rets };

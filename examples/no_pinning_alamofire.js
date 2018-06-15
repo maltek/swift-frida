@@ -7,9 +7,11 @@
 
 const Swift = require('../index');
 
-Swift.enumerateTypesSync().length; // collect all types into _typesByName
-let ServerTrustPolicy = Swift._typesByName.get("Alamofire.ServerTrustPolicy");
-let OpServerTrustPolicy = Swift._typesByName.get("Swift.Optional<_T0>").withGenericParams(ServerTrustPolicy);
+let typesByName = Swift.enumerateTypesSync(); // collect all types into _typesByName
+
+let ServerTrustPolicy = typesByName.get("Alamofire.ServerTrustPolicy");
+// instantiate Optional<T> with ServerTrustPolicy as type parameter
+let OpServerTrustPolicy = typesByName.get("Swift.Optional<_T0>").withGenericParams(ServerTrustPolicy);
 
 // [iPhone::yomo]-> Swift.demangle("_T09Alamofire24ServerTrustPolicyManagerC06servercD0AA0bcD0OSgSS7forHost_tF")
 // "Alamofire.ServerTrustPolicyManager.serverTrustPolicy(forHost: Swift.String) -> Swift.Optional<Alamofire.ServerTrustPolicy>"

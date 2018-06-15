@@ -1,4 +1,6 @@
 const metadata = require('./metadata');
+const types = require('./types');
+const { api } = require('./runtime-api');
 const {convention: CC, makeCallTrampoline, checkTrampolineError, convertToCParams} = require('./calling-convention');
 
 function swiftToString(obj) {
@@ -18,14 +20,14 @@ function swiftToString(obj) {
         let type = opaque.type;
         let vwt = opaque.type.valueWitnessTable;
         if (vwt.flags.IsNonInline) {
-            let _swift_release_ = new NativeFunction(Memory.readPointer(Swift._api._swift_release), 'void', ['pointer']);
+            let _swift_release_ = new NativeFunction(Memory.readPointer(api._swift_release), 'void', ['pointer']);
             _swift_release_(opaque.fixedSizeBuffer0);
         } else {
             vwt.destroy(pointer, type._ptr);
         }
     }
 
-    let SwiftString = Swift._typesByName.get("Swift.String");
+    let SwiftString = types.typesByName.get("Swift.String");
     if (!SwiftString.canonicalType)
         SwiftString = SwiftString.withGenericParams();
 
@@ -35,7 +37,7 @@ function swiftToString(obj) {
     let copyFn;
     let vwt = type.canonicalType.valueWitnessTable;
     if (type.kind === "Existential" && type.canonicalType.getRepresentation() === "Opaque") {
-        dynamicType = Swift._api.swift_getDynamicType(pointer, type.canonicalType._ptr, 1);
+        dynamicType = api.swift_getDynamicType(pointer, type.canonicalType._ptr, 1);
         copyFn = vwt.initializeBufferWithCopyOfBuffer;
     } else {
         dynamicType = type.canonicalType._ptr;
@@ -45,16 +47,16 @@ function swiftToString(obj) {
     Memory.writePointer(copy.add(3 * Process.pointerSize), dynamicType);
 
     let stringResult = Memory.alloc(Process.pointerSize * 3);
-    Memory.writePointer(stringResult, Swift._api._T0s19_emptyStringStorages6UInt32Vv);
+    Memory.writePointer(stringResult, api._T0s19_emptyStringStorages6UInt32Vv);
     Memory.writePointer(stringResult.add(Process.pointerSize), ptr(0));
     Memory.writePointer(stringResult.add(2*Process.pointerSize), ptr(0));
 
     let threadId = Process.getCurrentThreadId();
 
-    let textOutputStreamWitnessTableForString = Swift._api._T0SSs16TextOutputStreamsWP;
-    let Any = Swift._api.swift_getExistentialTypeMetadata(metadata.ProtocolClassConstraint.Any, ptr(0), 0, ptr(0));
+    let textOutputStreamWitnessTableForString = api._T0SSs16TextOutputStreamsWP;
+    let Any = api.swift_getExistentialTypeMetadata(metadata.ProtocolClassConstraint.Any, ptr(0), 0, ptr(0));
 
-    let dump = Swift._api._T0s4dumpxx_q_z2toSSSg4nameSi6indentSi8maxDepthSi0E5Itemsts16TextOutputStreamR_r0_lF;
+    let dump = api._T0s4dumpxx_q_z2toSSSg4nameSi6indentSi8maxDepthSi0E5Itemsts16TextOutputStreamR_r0_lF;
 
     const LONG_MAX = ptr(0).not().shr(1);
 
@@ -85,9 +87,9 @@ function swiftToString(obj) {
     // Destroy the return value (a copy of the existential container for the dumped value).
     __swift_destroy_boxed_opaque_existential_0(returnAlloc);
 
-    let encoding = Memory.readPointer(Swift._api._T0SS10FoundationE8EncodingV4utf8ACfau());
+    let encoding = Memory.readPointer(api._T0SS10FoundationE8EncodingV4utf8ACfau());
 
-    let witnessTableStringProtocol = Swift._api._T0SSs14StringProtocolsWP;
+    let witnessTableStringProtocol = api._T0SSs14StringProtocolsWP;
     let listener;
     let toCStringPtr = Module.findExportByName("libswiftFoundation.dylib", "_T0s14StringProtocolP10FoundationsAARzSS5IndexVADRtzlE01cA0Says4Int8VGSgSSACE8EncodingV5using_tF");
     trampoline = makeCallTrampoline(toCStringPtr, false, stringResult, null);
@@ -99,8 +101,8 @@ function swiftToString(obj) {
     // metadata to find this offset
     let str = Memory.readUtf8String(array.add(8 + 3 * Process.pointerSize));
 
-    Swift._api.swift_unknownRelease(Memory.readPointer(stringResult.add(2*Process.pointerSize)));
-    Swift._api.swift_bridgeObjectRelease(array);
+    api.swift_unknownRelease(Memory.readPointer(stringResult.add(2*Process.pointerSize)));
+    api.swift_bridgeObjectRelease(array);
 
     return str;
 }
@@ -326,14 +328,14 @@ function defineMember(wrapperObject, description, name, getAddr) {
             let addr = getAddr();
             let pointer = addr;
             if (description.weak) {
-                let strong = Swift._api.swift_weakLoadStrong(addr);
+                let strong = api.swift_weakLoadStrong(addr);
                 if (strong.isNull())
                     return null;
                 // weakLoadStrong() just incremented the strong reference count, undo that.
                 // If the user wants to keep this alive longer than right now, they need to manually increase
                 // the reference count for such a variable just like they'd have to for anything else.
                 // TODO: we probably should register a finalizer and release things there instead.
-                Swift._api.swift_release(strong);
+                api.swift_release(strong);
                 pointer = strong;
                 // TODO: does this really work? I have a feeling we need to write this pointer to memory and pass that around.
             }
@@ -348,7 +350,7 @@ function defineMember(wrapperObject, description, name, getAddr) {
         set(newVal) {
             let addr = getAddr();
             if (description.weak) {
-                Swift._api.swift_weakAssign(addr, newVal.$pointer);
+                api.swift_weakAssign(addr, newVal.$pointer);
             } else {
                 let assigned = false;
                 if ("fromJS" in description.type && !("$pointer" in newVal))
@@ -378,7 +380,7 @@ function makeWrapper(type, pointer, owned) {
     } else if (isClassType(type)) {
         let object = Memory.readPointer(pointer);
         let canonical = ObjC.api.object_getClass(object);
-        type = Swift._typeFromCanonical(canonical);
+        type = new types.Type(null, canonical);
     }
 
     wrapperObject.$staticType = staticType;
@@ -400,7 +402,7 @@ function makeWrapper(type, pointer, owned) {
                 enumerable: true,
                 get() {
                     let object = Memory.readPointer(pointer);
-                    return Swift._api.CFGetRetainCount(object);
+                    return api.CFGetRetainCount(object);
                 },
             },
         });
@@ -445,12 +447,13 @@ function makeWrapper(type, pointer, owned) {
                             payload = buf;
                         } else if (curCase.weak) {
                             // TODO: document that we're returning the reference to the existing value
-                            let strong = Swift._api.swift_weakLoadStrong(payload);
+                            let strong = api.swift_weakLoadStrong(payload);
                             if (strong.isNull())
                                 return null;
                             payload = buf;
                             owned = false;
                         }
+                        // TODO: toJS
 
                         return makeWrapper(curCase.type, payload, owned);
                     },
@@ -475,12 +478,13 @@ function makeWrapper(type, pointer, owned) {
                         enumVwt.destroy(pointer, type.canonicalType._ptr);
 
                         if (newCase.type) {
+                            // TODO: fromJS
                             let newCanon = newCase.type.canonicalType;
                             if (newCase.weak) {
                                 // TODO: document that we're assigning the existing reference
-                                Swift._api.swift_weakInit(payload, payloadValue.$pointer);
+                                api.swift_weakInit(payload, payloadValue.$pointer);
                             } else if (newCase.indirect) {
-                                let box = Swift._api.swift_allocBox(newCase.type.canonicalType._ptr)[1];
+                                let box = api.swift_allocBox(newCase.type.canonicalType._ptr)[1];
                                 newCanon.valueWitnessTable.initializeWithCopy(box, payloadValue.$pointer, newCanon._ptr);
                                 Memory.writePointer(pointer, box);
                             } else {
@@ -516,7 +520,7 @@ function makeWrapper(type, pointer, owned) {
             enumerable: true,
             get() {
                 let cont = new metadata.OpaqueExistentialContainer(pointer);
-                let dynType = Swift._typeFromCanonical(cont.type._ptr);
+                let dynType = new types.Type(cont.type._ptr);
                 if (isClassType(dynType) || !dynType.canonicalType.valueWitnessTable.isValueInline) {
                     return makeWrapper(dynType, pointer, false);
                 } else {
@@ -528,7 +532,7 @@ function makeWrapper(type, pointer, owned) {
                 let protocols = staticType.canonicalType.protocols.protocols;
                 for (let i = 0; i < protocols.length; i++) {
                     let proto = protocols[i];
-                    let conformance = Swift._api.swift_conformsToProtocol(newVal.$type.canonicalType._ptr, proto._ptr);
+                    let conformance = api.swift_conformsToProtocol(newVal.$type.canonicalType._ptr, proto._ptr);
                     if (conformance.isNull())
                         throw new Error(`this value does not implement the required protocol '${proto.name}'`);
                     witnesses.push(conformance);
@@ -539,7 +543,7 @@ function makeWrapper(type, pointer, owned) {
                 let oldVwt = cont.type.canonicalType.valueWitnessTable;
                 // TODO: support assigning ObjC.Object
                 if (isClassType(cont.type))
-                    Swift._api.swift_release(cont.heapObject);
+                    api.swift_release(cont.heapObject);
                 else if(oldVwt.isValueInline)
                     oldVwt.destroy(pointer);
                 else

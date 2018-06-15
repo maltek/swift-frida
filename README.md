@@ -1,12 +1,17 @@
 # swift-frida
 
-Swift runtime interop from Frida. (See [frida-swift](https://github.com/frida/frida-swift) instead, if you're looking to talk to Frida from Swift code you write.)
+Swift runtime interop from Frida -- interact with iOS apps written in Swift,
+using Frida. (See [frida-swift](https://github.com/frida/frida-swift) instead,
+if you're looking to talk to Frida from Swift code you write.)
 
 ## Status
 
-This is a work-in-progress, so expect some bugs and missing functionality! 
+The functionality described below is mostly stable and working, but probably
+still has some bugs that need to be fixed (please report them!).
 
-I'm mainly testing things on iOS 11.1.2 (64bit), every now and then also on iOS 9.3.5 (32bit). I haven't looked at any other platform at all. I'm only testing with Apps using Swift 4.0 at the moment.
+I'm mainly testing things on iOS 11.1.2 (64bit), and on iOS 9.3.5 (32bit). Other
+operating systems are not supported. Only apps using Swift 4.0.* are supported
+at the moment.
 
 
 ## Available APIs
@@ -19,10 +24,9 @@ Right now, the following functions are available in the `Swift` namespace, when 
  * `getMangled(name)` The opposite of `demangle(name)`. Right now, this only works for names that were previously returned by `demangle(name)`.
  * `_api` This is an object providing access to many low-level functions in the Swift runtime.
  * `_typeFromCanonical(metadata)` This function allows you to create a `Type` constructor from a low-level `Metadata*`.
- * `_typesByName` A `Map` storing all the types found by the last invocation of `enumerateTypesSync()`, with their names as keys.
  * `makeFunctionType(args, returnType, flags)` Creates a new Swift `Type` constructor for a function type. `args` should be an array with the types of each argument, `flags` is an optional object with `doesThrow` and/or `convention` properties.
  * `makeTupleType(labels, innerTypes)` Creates a new Swift `Type` constructor for a tuple type. `labels` and `innerTypes` are arrays with the labels and types of the tuple elements. Use empty strings for unlabeled elements.
- * `enumerateTypesSync()` Returns an array with the information about all Swift data types defined in the Swift program. The returned objects have a `toString` method returning the fully qualified name of the type, including generic bounds (if possible) and a string property `kind` that tells you which kind of type (e.g. `"Class"`, `"Struct"`) it is. The `Type` property returns a `Type` constructor for the meta type of the represented type. Depending on the kind of type, additional methods are available:
+ * `enumerateTypesSync()` Returns a `Map` storing information about all known Swift data types defined in the Swift program. The keys are the names of the data types (as strings), and the values are objects describing the type. These objects have a `toString` method returning the fully qualified name of the type, including generic bounds (if possible) and a string property `kind` that tells you which kind of type (e.g. `"Class"`, `"Struct"`) it is. The `Type` property returns a `Type` constructor for the meta type of the represented type. Depending on the kind of type, additional methods are available:
  
     Kind             | available method
     -----------------|---------------------------------------------------------------------------------------------------------------
@@ -57,7 +61,7 @@ Right now, the following functions are available in the `Swift` namespace, when 
     Existential        | `$value` allows you to get/set the value in this variable. (Only for Existential types when they are not class bound.)
     Tuple              | Getters and setters for every tuple element (see `$type.tupleElements()`, by index or (when available) by label.
 
-    Returned values are normally the same kind of `SwiftValue` objects, except that for integers and booleans which are transparently converted into their JavaScript equivalents. For strings, you can use `toString()` and `$assignWithCopy` to convert between the JavaScript and Swift types.
+    Returned values are normally the same kind of `SwiftValue` objects, except for integers and booleans, which are transparently converted into their JavaScript equivalents. For strings, you can use `toString()` and `$assignWithCopy` to convert between the JavaScript and Swift types.
 
 
 
@@ -66,7 +70,8 @@ But, again, this is completely unstable and might change at any time.
 
 ## Test Setup
 
-For testing, you want to run a command like this, to recompile whenever you change the scripts:
+For testing, you want to run a command like this, to recompile whenever you
+change the scripts:
 
     frida-compile -w -o /tmp/swift.js loader
 
@@ -74,12 +79,16 @@ Then, you can just run Frida interactively, with the Swift module loaded:
 
     frida -U -n Foo -l /tmp/swift.js
 
-You can now play with the functions of the `Swift` object.  (After making a change to a file in this repo, use `%reload` to reload the Swift script after recompiling.)
+You can now play with the functions of the `Swift` object.  (After making a
+change to a file in this repo, use `%reload` to reload the Swift script after
+recompiling.)
 
 
 ## License
-Code in `metadata.js` is based on Apache-2.0 licensed Swift compiler source code.
-Code in `index.js` is based on wxWindows-3.1 licensed frida-objc source code.
+
+Code in `metadata.js` is based on Apache-2.0 licensed Swift compiler source
+code.  Code in `runtime-api.js` is based on wxWindows-3.1 licensed frida-objc
+source code.
 
 The compatible intersection of those licenses is LGPL-3.0 (or later) with
 wxWindows exceptions. So that's also the license terms under which we release
