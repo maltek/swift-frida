@@ -1,4 +1,4 @@
-= r2swida
+# r2swida
 
 Swift plugin for [r2frida](https://github.com/nowsecure/r2frida). Compile with
 `frida-compile -w -o /tmp/r2swida.js examples/r2frida/`. Usage:
