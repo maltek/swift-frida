@@ -595,7 +595,7 @@ function makeWrapper(type, pointer, owned) {
     };
     if (owned) {
         wrapperObject.$destroy = function() {
-            type.canonicalType.valueWitnessTable._destroy(pointer, type.canonicalType._ptr);
+            type.canonicalType.valueWitnessTable.destroy(pointer, type.canonicalType._ptr);
             invalidateWrapper();
         };
         let destruct = function() {
