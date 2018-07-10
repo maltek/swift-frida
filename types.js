@@ -1,6 +1,6 @@
 const metadata = require('./metadata');
 const mangling = require('./mangling');
-const {api} = require('./runtime-api');
+const runtime = require('./runtime-api');
 
 function strlen(pointer) {
     let i;
@@ -22,7 +22,7 @@ function getOrMakeProtocolType(proto) {
     let arr = Memory.alloc(Process.pointerSize);
     Memory.writePointer(arr, proto._ptr);
 
-    let canonical = api.swift_getExistentialTypeMetadata(metadata.ProtocolClassConstraint.Any,
+    let canonical = runtime.api.swift_getExistentialTypeMetadata(metadata.ProtocolClassConstraint.Any,
         /*superClass*/ptr(0), /*numProtocols*/ 1, arr);
     canonical = new metadata.TargetMetadata(canonical);
 
@@ -67,7 +67,7 @@ function Type(nominalType, canonicalType, name, accessFunction) {
     if (canonicalType && ((canonicalType.kind === "Class" && canonicalType.isTypeMetadata() && !canonicalType.flags.UsesSwift1Refcounting) ||
             canonicalType.kind === "ObjCClassWrapper")) {
         this.toJS = function(pointer) { return ObjC.Object(Memory.readPointer(pointer)); };
-        this.fromJS = function (address, value) { api.objc_storeStrong(address, value); return true; };
+        this.fromJS = function (address, value) { runtime.api.objc_storeStrong(address, value); return true; };
         this.getSize = function getSize() { return Process.pointerSize; };
     }
 
@@ -225,7 +225,7 @@ function Type(nominalType, canonicalType, name, accessFunction) {
             let superClass = canonicalType.getSuperclassConstraint();
             superClass = superClass === null ? ptr(0) : superClass._ptr;
 
-            let canon = api.swift_getExistentialTypeMetadata(bound, superClass, protos.length, arr);
+            let canon = runtime.api.swift_getExistentialTypeMetadata(bound, superClass, protos.length, arr);
             return new Type(null, new metadata.TargetMetadata(canon), names.join(" + "));
         };
         if (canonicalType.isClassBounded()) {
@@ -238,7 +238,7 @@ function Type(nominalType, canonicalType, name, accessFunction) {
             };
             this.withoutClassBound = function withoutClassBound() {
                 let protocols = canonicalType.protocols;
-                let canon = api.swift_getExistentialTypeMetadata(metadata.ProtocolClassConstraint.Any,
+                let canon = runtime.api.swift_getExistentialTypeMetadata(metadata.ProtocolClassConstraint.Any,
                     ptr(0), protocols.length, protocols.arrayLocation);
                 return new Type(null, new metadata.TargetMetadata(canon));
             };
@@ -246,7 +246,7 @@ function Type(nominalType, canonicalType, name, accessFunction) {
             this.isClassBounded = false;
             this.withClassBound = function withClassBound() {
                 let protocols = canonicalType.protocols;
-                let canon = api.swift_getExistentialTypeMetadata(metadata.ProtocolClassConstraint.Class,
+                let canon = runtime.api.swift_getExistentialTypeMetadata(metadata.ProtocolClassConstraint.Class,
                     ptr(0), protocols.length, protocols.arrayLocation);
                 return new Type(null, new metadata.TargetMetadata(canon));
             };
@@ -258,14 +258,14 @@ function Type(nominalType, canonicalType, name, accessFunction) {
             if ('getSuperclassConstraint' in this && this.getSuperclassConstraint()) {
                 this.withoutSuperclassConstraint = function withoutSuperclassConstraint() {
                     let protocols = canonicalType.protocols;
-                    let canon = api.swift_getExistentialTypeMetadata(metadata.ProtocolClassConstraint.Class,
+                    let canon = runtime.api.swift_getExistentialTypeMetadata(metadata.ProtocolClassConstraint.Class,
                         ptr(0), protocols.length, protocols.arrayLocation);
                     return new Type(null, new metadata.TargetMetadata(canon));
                 };
             } else {
                 this.withSuperclassConstraint = function withSuperclassConstraint(superType) {
                     let protocols = canonicalType.protocols;
-                    let canon = api.swift_getExistentialTypeMetadata(metadata.ProtocolClassConstraint.Class,
+                    let canon = runtime.api.swift_getExistentialTypeMetadata(metadata.ProtocolClassConstraint.Class,
                         superType.canonicalType._ptr, protocols.length, protocols.arrayLocation);
                     return new Type(null, new metadata.TargetMetadata(canon));
                 };
@@ -445,7 +445,7 @@ function Type(nominalType, canonicalType, name, accessFunction) {
                     // TODO: fromJS needs a parameter telling it whether it is initializing or assigning
                     canonicalType.valueWitnessTable.destroy(address, canonicalType._ptr);
                     let cStr = Memory.allocUtf8String(value);
-                    api.swift_stringFromUTF8InRawMemory(address, cStr, value.length);
+                    runtime.api.swift_stringFromUTF8InRawMemory(address, cStr, value.length);
                     return true;
                 };
             case "Swift.Bool":
@@ -489,9 +489,9 @@ function Type(nominalType, canonicalType, name, accessFunction) {
             get() {
                 let meta;
                 if (this.kind === "Existential" || this.kind === "ExistentialMetatype") {
-                    meta = api.swift_getExistentialMetatypeMetadata(canonicalType._ptr);
+                    meta = runtime.api.swift_getExistentialMetatypeMetadata(canonicalType._ptr);
                 } else {
-                    meta = api.swift_getMetatypeMetadata(canonicalType._ptr);
+                    meta = runtime.api.swift_getMetatypeMetadata(canonicalType._ptr);
                 }
                 return new Type(null, new metadata.TargetMetadata(meta), this.toString() + ".Type");
             },
@@ -527,7 +527,7 @@ Type.prototype = {
             return this._name;
 
         if (this.canonicalType) {
-            let [pointer, len] = api.swift_getTypeName(this.canonicalType._ptr, /* qualified? */ 1);
+            let [pointer, len] = runtime.api.swift_getTypeName(this.canonicalType._ptr, /* qualified? */ 1);
             let str = Memory.readUtf8String(pointer, len.toInt32());
             if (str.length !== 0 && str !== "<<< invalid type >>>") {
                 this._name = str;
@@ -605,7 +605,7 @@ Type.prototype = {
 };
 
 const typesByName = new Map();
-function findAllTypes(api) {
+function findAllTypes() {
     let sizeAlloc = Memory.alloc(8);
     const __TEXT = Memory.allocUtf8String("__TEXT");
 
@@ -638,7 +638,7 @@ function findAllTypes(api) {
     for (let mod of Process.enumerateModulesSync()) {
         for (let section = 0; section < sectionNames.length; section++) {
             // we don't have to use the name _mh_execute_header to refer to the mach-o header -- it's the module header
-            let pointer = api.getsectiondata(mod.base, __TEXT, sectionNames[section], sizeAlloc);
+            let pointer = runtime.api.getsectiondata(mod.base, __TEXT, sectionNames[section], sizeAlloc);
             if (pointer.isNull())
                 continue;
 
@@ -650,14 +650,14 @@ function findAllTypes(api) {
                     record = new metadata.TargetTypeMetadataRecord(pointer.add(i));
                 } else {
                     record = new metadata.TargetProtocolConformanceRecord(pointer.add(i));
-                    proto = getOrMakeProtocolType(record.protocol)
+                    proto = getOrMakeProtocolType(record.protocol);
                     addType(proto);
                 }
                 let nominalType = null;
                 if (record.getTypeKind() === metadata.TypeMetadataRecordKind.UniqueNominalTypeDescriptor)
                     nominalType = record.getNominalTypeDescriptor();
 
-                let canonicalType = record.getCanonicalTypeMetadata(api);
+                let canonicalType = record.getCanonicalTypeMetadata(runtime.api);
 
                 if (nominalType || canonicalType) {
                     addType(new Type(nominalType, canonicalType));
@@ -681,7 +681,7 @@ function findAllTypes(api) {
                     // first try to get the canonical type descriptor through the runtime API
                     // (this only works for class types)
                     let nameCstr = Memory.allocUtf8String(name);
-                    let canon = api.swift_getTypeByName(nameCstr, strlen(nameCstr));
+                    let canon = runtime.api.swift_getTypeByName(nameCstr, strlen(nameCstr));
                     if (canon.isNull()) {
                         // type metadata sometimes can have members at negative indices, so we need to
                         // iterate until we find something that looks like the beginning of a Metadata object
@@ -706,16 +706,15 @@ function findAllTypes(api) {
                 }
             }
         }
-
     }
 
     if (!typesByName.has("Any")) {
-        let Any = api.swift_getExistentialTypeMetadata(metadata.ProtocolClassConstraint.Any, /*superClass*/ ptr(0), /*numProtocols*/ 0, /*protcols*/ ptr(0));
+        let Any = runtime.api.swift_getExistentialTypeMetadata(metadata.ProtocolClassConstraint.Any, /*superClass*/ ptr(0), /*numProtocols*/ 0, /*protcols*/ ptr(0));
         Any = new Type(null, new metadata.TargetMetadata(Any), "Any");
         typesByName.set("Any", Any);
     }
     if (!typesByName.has("Swift.AnyObject")) {
-        let AnyObject = api.swift_getExistentialTypeMetadata(metadata.ProtocolClassConstraint.Class, /*superClass*/ ptr(0), /*numProtocols*/ 0, /*protcols*/ ptr(0));
+        let AnyObject = runtime.api.swift_getExistentialTypeMetadata(metadata.ProtocolClassConstraint.Class, /*superClass*/ ptr(0), /*numProtocols*/ 0, /*protcols*/ ptr(0));
         AnyObject = new Type(null, new metadata.TargetMetadata(AnyObject), "Swift.AnyObject");
         typesByName.set("Swift.AnyObject", AnyObject);
     }
@@ -770,7 +769,7 @@ function makeTupleType(labels, innerTypes) {
         Memory.writePointer(elements.add(i * Process.pointerSize), innerTypes[i].canonicalType._ptr);
     }
     let valueWitnesses = ptr(0);
-    let pointer = api.swift_getTupleTypeMetadata(innerTypes.length, elements, labelsStr, valueWitnesses);
+    let pointer = runtime.api.swift_getTupleTypeMetadata(innerTypes.length, elements, labelsStr, valueWitnesses);
     let canonical = new metadata.TargetMetadata(pointer);
 
     if (canonical.labels.toString === labelsStr.toString())

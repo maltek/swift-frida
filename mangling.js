@@ -2,8 +2,6 @@
 
 /* jshint esnext: true, evil: true */
 
-let api;
-
 module.exports = {
     MANGLING_PREFIX: "_T", // 'old' mangling -- Swift HEAD has switched to using "_S"
 
@@ -16,6 +14,9 @@ module.exports = {
     demangle(name) {
         if (!this.isSwiftName(name))
             throw new Error("function name '" + name + "' is not a mangled Swift function");
+
+
+        let api = require('./runtime-api').api;
 
         let cStr = Memory.allocUtf8String(name);
         let demangled = api.swift_demangle(cStr, name.length, ptr(0), ptr(0), 0);
@@ -34,4 +35,3 @@ module.exports = {
             return name;
     },
 };
-api = require('./runtime-api').api;

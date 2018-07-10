@@ -46,7 +46,7 @@ Swift = module.exports = {
     },
 
     enumerateTypesSync() {
-        return types.findAllTypes(this._api);
+        return types.findAllTypes();
     },
 
     makeTupleType(labels, innerTypes) {

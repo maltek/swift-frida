@@ -1,9 +1,10 @@
 const metadata = require('./metadata');
 const types = require('./types');
-const { api } = require('./runtime-api');
 const {convention: CC, makeCallTrampoline, checkTrampolineError, convertToCParams} = require('./calling-convention');
 
 function swiftToString(obj) {
+    const { api } = require('./runtime-api');
+
     let type = obj.$type;
     let pointer = obj.$pointer;
     /*
@@ -323,6 +324,8 @@ function escapeName(name, obj) {
     return obj;
 }
 function defineMember(wrapperObject, description, name, getAddr) {
+    const { api } = require('./runtime-api');
+
     Object.defineProperty(wrapperObject, name, {
         enumerable: true,
         get() {
@@ -374,6 +377,8 @@ function makeWrapper(type, pointer, owned) {
         // TODO: check the `owned` variable
         return ObjC.Object(Memory.readPointer(pointer));
     }
+
+    const { api } = require('./runtime-api');
 
     let wrapperObject = {};
     if (type.kind === "Function") {
