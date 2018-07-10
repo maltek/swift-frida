@@ -605,13 +605,12 @@ Type.prototype = {
 };
 
 const typesByName = new Map();
-function findAllTypes() {
+function findAllTypes(library) {
     let sizeAlloc = Memory.alloc(8);
     const __TEXT = Memory.allocUtf8String("__TEXT");
 
     const sectionNames = [Memory.allocUtf8String("__swift2_types"), Memory.allocUtf8String("__swift2_proto")];
     const recordSizes = [8, 16];
-    typesByName.clear();
 
     function getTypePrio(t) {
         if (t.canonicalType)
@@ -635,7 +634,15 @@ function findAllTypes() {
         }
     }
 
-    for (let mod of Process.enumerateModulesSync()) {
+    let mods;
+    if (library !== undefined) {
+        Module.ensureInitialized(library);
+        mods = [{name: library, base: Module.findBaseAddress(library)}];
+    } else {
+        typesByName.clear();
+        mods = Process.enumerateModulesSync().map(mod => mod.base);
+    }
+    for (let mod of mods) {
         for (let section = 0; section < sectionNames.length; section++) {
             // we don't have to use the name _mh_execute_header to refer to the mach-o header -- it's the module header
             let pointer = runtime.api.getsectiondata(mod.base, __TEXT, sectionNames[section], sizeAlloc);

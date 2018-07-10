@@ -52,8 +52,8 @@ Swift = module.exports = {
         return mangling.demangle(name);
     },
 
-    enumerateTypesSync() {
-        return types.findAllTypes();
+    enumerateTypesSync(library) {
+        return types.findAllTypes(library);
     },
 
     makeTupleType(labels, innerTypes) {
