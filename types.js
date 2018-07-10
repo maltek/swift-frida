@@ -672,17 +672,26 @@ function findAllTypes(api) {
                 let demangled = mangling.demangle(exp.name);
                 if (demangled.startsWith(METADATA_PREFIX)) {
                     let name = demangled.substr(METADATA_PREFIX.length);
-                    // type metadata sometimes can have members at negative indices, so we need to
-                    // iterate until we find something that looks like the beginning of a Metadata object
-                    // (Sadly, that doesn't work for class metadata with ISA pointers, but it should be no
-                    // problem to find ObjC metadata for such classes.)
-                    for (let i = 0; i < 2; i++) {
-                        let ptr = exp.address.add(Process.pointerSize * i);
-                        if (Memory.readPointer(ptr).toString(10) in metadata.MetadataKind) {
-                            addType(new Type(null, new metadata.TargetMetadata(ptr), name));
-                            break;
+
+                    // first try to get the canonical type descriptor through the runtime API
+                    // (this only works for class types)
+                    let nameCstr = Memory.allocUtf8String(name);
+                    let canon = api.swift_getTypeByName(nameCstr, strlen(nameCstr));
+                    if (canon.isNull()) {
+                        // type metadata sometimes can have members at negative indices, so we need to
+                        // iterate until we find something that looks like the beginning of a Metadata object
+                        // (Sadly, that doesn't work for class metadata with ISA pointers, but it should be no
+                        // problem to find ObjC metadata for such classes.)
+                        for (let i = 0; i < 2; i++) {
+                            let ptr = exp.address.add(Process.pointerSize * i);
+                            if (Memory.readPointer(ptr).toString(10) in metadata.MetadataKind) {
+                                canon = ptr;
+                                break;
+                            }
                         }
                     }
+                    if (!canon.isNull())
+                        addType(new Type(null, new metadata.TargetMetadata(canon), name));
                 } else if (demangled.startsWith(NOMINAL_PREFIX)) {
                     let name = demangled.substr(NOMINAL_PREFIX.length);
                     addType(new Type(new metadata.TargetNominalTypeDescriptor(exp.address), null, name));
