@@ -158,23 +158,28 @@ function Type(nominalType, canonicalType, name, accessFunction) {
                     throw new Error("fields without offset vector not implemented");
 
                 let fieldTypeAccessor = new NativeFunction(info.getFieldTypes, 'pointer', ['pointer']);
-                let fieldTypes = fieldTypeAccessor(canon._ptr);
+                let fieldTypes = fieldTypeAccessor(canonicalType._ptr);
 
                 let fieldName = info.fieldNames;
-                let fieldOffsets = canon._ptr.add(info.fieldOffsetVectorOffset * Process.pointerSize);
+                let fieldOffsets = canonicalType._ptr.add(info.fieldOffsetVectorOffset * Process.pointerSize);
                 for (let j = 0; j < info.numFields; j++) {
+                    let fieldNameStr = Memory.readUtf8String(fieldName);
+                    let curOffset = Memory.readPointer(fieldOffsets.add(j * Process.pointerSize));
+
                     let type = Memory.readPointer(fieldTypes.add(j * Process.pointerSize));
                     let typeFlags = type.and(metadata.FieldTypeFlags.typeMask);
-                    type = new metadata.TargetMetadata(type.and(ptr(metadata.FieldTypeFlags.typeMask).not()));
-                    let curOffset = Memory.readPointer(fieldOffsets.add(j * Process.pointerSize));
-                    let fieldNameStr = Memory.readUtf8String(fieldName);
+                    // seen an artificial subclass where a field type was null
+                    if (type.isNull()) {
+                        type = null;
+                    } else {
+                        type = new metadata.TargetMetadata(type.and(ptr(metadata.FieldTypeFlags.typeMask).not()));
+                        type = new Type(null, type, `?Unknown type of ${this}.${fieldNameStr}`);
+                    }
 
-                    let weak = (typeFlags & metadata.FieldTypeFlags.Weak) === metadata.FieldTypeFlags.Weak;
-                    let xtype = new Type(null, type, `?Unknown type of ${this}.${fieldNameStr}`);
                     results.push({
                         name: fieldNameStr,
                         offset: offset.add(curOffset),
-                        type: new Type(null, type, `?Unknown type of ${this}.${fieldNameStr}`),
+                        type,
                         weak: (typeFlags & metadata.FieldTypeFlags.Weak) === metadata.FieldTypeFlags.Weak,
                     });
                     fieldName = fieldName.add(strlen(fieldName) + 1);
