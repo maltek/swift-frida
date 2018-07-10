@@ -118,8 +118,13 @@ function Type(nominalType, canonicalType, name, accessFunction) {
                 let typeFlags = 0;
                 if (i < payloadCount) {
                     type = Memory.readPointer(caseTypes.add(i * Process.pointerSize));
-                    typeFlags = type.and(metadata.FieldTypeFlags.typeMask);
-                    type = new metadata.TargetMetadata(type.and(~metadata.FieldTypeFlags.typeMask));
+                    // nested enums referencing their parent type are missing the pointer to the parent type
+                    if (type.isNull()) {
+                        type = null;
+                    } else {
+                        typeFlags = type.and(metadata.FieldTypeFlags.typeMask);
+                        type = new metadata.TargetMetadata(type.and(~metadata.FieldTypeFlags.typeMask));
+                    }
                 }
                 cases.push({
                     tag: i - payloadCount,
