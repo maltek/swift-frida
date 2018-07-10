@@ -27,7 +27,8 @@ function swiftToString(obj) {
         }
     }
 
-    let SwiftString = types.typesByName.get("Swift.String");
+    let nomSwiftString = new metadata.TargetNominalTypeDescriptor(api._T0SSMn);
+    let SwiftString = new types.Type(nomSwiftString, null, "Swift.String");
     if (!SwiftString.canonicalType)
         SwiftString = SwiftString.withGenericParams();
 

@@ -57,6 +57,7 @@ module.exports = {
                     "_T0SSs16TextOutputStreamsWP", // protocol witness table for Swift.String : Swift.TextOutputStream in Swift
                     "_T0s19_emptyStringStorages6UInt32Vv", // Swift._emptyStringStorage
                     "_swift_release", // pointer to _swift_release_
+                    "_T0SSMn", // nominal type descriptor for Swift.String
                 ]),
                 functions: {
                     "swift_demangle": ['pointer', ['pointer', size_t, 'pointer', 'pointer', 'int32']],
