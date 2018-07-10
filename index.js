@@ -13,7 +13,14 @@ let Swift;
 Swift = module.exports = {
 
     get available() {
-        return Module.findBaseAddress("libswiftCore.dylib") !== null;
+        if (Module.findBaseAddress("libswiftCore.dylib") === null)
+            return false;
+        try {
+            runtime.api;
+            return true;
+        } catch(_) {
+        }
+        return false;
     },
 
     isSwiftName(symbol) {
