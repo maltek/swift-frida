@@ -528,7 +528,12 @@ Type.prototype = {
 
         if (this.canonicalType) {
             let [pointer, len] = runtime.api.swift_getTypeName(this.canonicalType._ptr, /* qualified? */ 1);
-            let str = Memory.readUtf8String(pointer, len.toInt32());
+            let str = "";
+            try {
+                str = Memory.readUtf8String(pointer, len.toInt32());
+            } catch (_) {
+            }
+
             if (str.length !== 0 && str !== "<<< invalid type >>>") {
                 this._name = str;
                 return str;
