@@ -1,5 +1,4 @@
 const metadata = require('./metadata');
-const swiftValue = require('./swift-value');
 const mangling = require('./mangling');
 const {api} = require('./runtime-api');
 
@@ -493,6 +492,7 @@ function Type(nominalType, canonicalType, name, accessFunction) {
         if (!canonicalType) {
             return this.withGenericParams();
         } else {
+            const swiftValue = require('./swift-value');
             let func = swiftValue.makeSwiftValue(this);
             Object.defineProperties(func, Object.getOwnPropertyDescriptors(this));
             Reflect.setPrototypeOf(func, Type.prototype);
