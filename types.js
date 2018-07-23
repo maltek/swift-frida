@@ -645,7 +645,7 @@ function findAllTypes(library) {
         mods = [{name: library, base: Module.findBaseAddress(library)}];
     } else {
         typesByName.clear();
-        mods = Process.enumerateModulesSync().map(mod => mod.base);
+        mods = Process.enumerateModulesSync();
     }
     for (let mod of mods) {
         for (let section = 0; section < sectionNames.length; section++) {
