@@ -161,7 +161,7 @@ def print_header(message):
             size = pointer_size if type_name.endswith('*') else int(types[type_name]['size'], 16)
             prev_end = offset + size
 
-    print("#include <stdint.h>")
+    #print("#include <stdint.h>")
     print("#pragma pack(1)")
     print("typedef void *voidp;")
     print("typedef struct Metadata_s Metadata;")
