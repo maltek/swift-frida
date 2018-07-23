@@ -12,7 +12,7 @@ from pycparser.c_ast import Decl, Enum, Enumerator, IdentifierType, PtrDecl, Str
 from pycparser.c_generator import CGenerator
 from pycparser.c_parser import CParser
 
-dev = next(iter(dev for dev in frida.enumerate_devices() if dev.type == 'tether'))
+dev = next(iter(dev for dev in frida.enumerate_devices() if dev.type == 'usb'))
 session = dev.attach(sys.argv[1])
 with NamedTemporaryFile() as tmp:
     run(['frida-compile', '-o', tmp.name, os.path.join(os.path.dirname(__file__), './c_header_gen.js')], check=True)
