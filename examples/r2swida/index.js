@@ -11,7 +11,7 @@ r2frida.pluginRegister('swift', function(name) {
         return function(args) {
             types = Swift.enumerateTypesSync();
             global.swiftTypes = types;
-            console.log(`found ${types.size} types`);
+            return `found ${types.size} types`;
         };
     }
     if (name === 'swt') {
@@ -19,63 +19,68 @@ r2frida.pluginRegister('swift', function(name) {
             if (types === null) {
                 throw new Error("please run the '\\swa' command first!");
             }
-            for (let name of args) {
-                let t = types.get(name);
-                if (t === undefined) {
-                    console.log(`Type '${name}' not found!`);
-                    if (name.indexOf('<') !== -1) {
-                        console.log(`Hint: maybe you need to manually instantiate it from its generic base.`);
-                    }
+            let msgs = [];
+            let name = args.join(" ");
+            let t = types.get(name);
+            if (t === undefined) {
+                msgs.push(`Type '${name}' not found!`);
+                if (name.indexOf('<') !== -1) {
+                    msgs.push(`Hint: maybe you need to manually instantiate it from its generic base.`);
+                }
+                throw new Error(msgs.join("\n"));
+            }
+            msgs.push(`${t}: ${t.nominalType} ${t.canonicalType}`);
+            if ('getSize' in t && t.getSize() !== undefined)
+                msgs.push(`size: ${t.getSize()} bytes`);
+            msgs.push(`kind: ${t.kind}`);
+
+            if (t.isGeneric()) {
+                let numParams;
+                if (t.nominalType && !t.nominalType.genericParams.flags.HasGenericParent) {
+                    numParams = t.nominalType.genericParams.flags.numGenericRequirements;
                 } else {
-                    console.log(`${name}:\nsize: ${t.getSize().toInt32()} bytes\nkind: ${t.kind}`);
-                    if (t.isGeneric()) {
-                        let numParams;
-                        if (t.nominalType && !t.nominalType.genericParams.flags.HasGenericParent) {
-                            numParams = t.nominalType.genericParams.flags.numGenericRequirements;
-                        } else {
-                            numParams = "unknown number of";
-                        }
-                        console.log(`Generic with ${numParams} generic requirements.`);
-                    }
-                    if ('enumCases' in t) {
-                        console.log(`cases:`);
-                        for (let enumCase of t.enumCases()) {
-                            let caseStr = "\t";
-                            if (enumCase.indirect)
-                                caseStr += "indirect ";
-                            if (enumCase.weak)
-                                caseStr += "weak ";
+                    numParams = "unknown number of";
+                }
+                msgs.push(`Generic with ${numParams} generic requirements.`);
+            }
+            if ('enumCases' in t) {
+                msgs.push(`cases:`);
+                for (let enumCase of t.enumCases()) {
+                    let caseStr = "\t";
+                    if (enumCase.indirect)
+                        caseStr += "indirect ";
+                    if (enumCase.weak)
+                        caseStr += "weak ";
 
-                            caseStr += enumCase.name;
+                    caseStr += enumCase.name;
 
-                            if (enumCase.type) {
-                                if (enumCase.type.kind === "Tuple")
-                                    caseStr += enumCase.type;
-                                else
-                                    caseStr += `(${enumCase.type})`;
-                            }
-                            console.log(caseStr);
-                        }
+                    if (enumCase.type) {
+                        if (enumCase.type.kind === "Tuple")
+                            caseStr += enumCase.type;
+                        else
+                            caseStr += `(${enumCase.type})`;
                     }
-                    if ('fields' in t) {
-                        console.log('fields:');
-                        for (let field of t.fields()) {
-                            let fieldStr = "";
-                            if (field.weak)
-                                fieldStr += "weak ";
-                            console.log(`\t${fieldStr}${field.name}: ${field.type}, offset ${field.offset}`);
-                        }
-                    }
-                    if ('tupleElements' in t) {
-                        for (let elem of t.tupleElements()) {
-                            let tupleStr = "";
-                            if (elem.label)
-                                tupleStr += `${elem.label}: `;
-                            console.log(`\t${tupleStr}${elem.type}, offset: ${elem.offset}`);
-                        }
-                    }
+                    msgs.push(caseStr);
                 }
             }
+            if ('fields' in t) {
+                msgs.push('fields:');
+                for (let field of t.fields()) {
+                    let fieldStr = "";
+                    if (field.weak)
+                        fieldStr += "weak ";
+                    msgs.push(`\t${fieldStr}${field.name}: ${field.type}, offset ${field.offset}`);
+                }
+            }
+            if ('tupleElements' in t) {
+                for (let elem of t.tupleElements()) {
+                    let tupleStr = "";
+                    if (elem.label)
+                        tupleStr += `${elem.label}: `;
+                    msgs.push(`\t${tupleStr}${elem.type}, offset: ${elem.offset}`);
+                }
+            }
+            return msgs.join("\n\t");
         };
     }
     if (name === 'swtl') {
@@ -84,9 +89,11 @@ r2frida.pluginRegister('swift', function(name) {
                 throw new Error("please run the '\\swa' command first!");
             }
 
+            let msgs = [];
             for (let name of types.keys()) {
-                console.log(name);
+                msgs.push(name);
             }
+            return msgs.join("\n");
         };
     }
 
@@ -98,8 +105,7 @@ r2frida.pluginRegister('swift', function(name) {
 
             for (let name of args) {
                 if (!types.has(name)) {
-                    console.log(`No type named '${name}' is known!`);
-                    return;
+                    throw new Error(`No type named '${name}' is known!`);
                 }
             }
 
@@ -107,12 +113,12 @@ r2frida.pluginRegister('swift', function(name) {
             let typeParams = args.map(name => types.get(name));
 
             if (!baseType.isGeneric()) {
-                console.log(`'${baseType}' is not a generic type!`);
+                throw new Error(`'${baseType}' is not a generic type!`);
             }
 
             let type = baseType.withGenericParams(...typeParams);
             types.set(type.toString(), type);
-            console.log(`successfully instantiated type '${type}'`);
+            return `successfully instantiated type '${type}'`;
         };
     }
     if (name === 'swp') {
@@ -124,36 +130,29 @@ r2frida.pluginRegister('swift', function(name) {
 
             let type = types.get(name);
             if (type === undefined) {
-                console.log(`Type '${name}' not found!`);
-                return;
+                throw new Error(`Type '${name}' not found!`);
             }
-            addrs = addrs.map(ptr);
-
-            for (let addr of addrs) {
-                console.log(new type(addr).toString());
-            }
+            return addrs.map(ptr).map(addr => new type(addr).toString()).join("\n");
         };
     }
     if (name === 'swid') { // demangle symbol name
         return function(args) {
-            for (let name of args) {
-                console.log(Swift.demangle(name));
-            }
+            return args.map(Swift.demangle).join("\n");
         };
     }
     if (name === 'swis') { // list demangled symbols
     }
     if (name === 'sw?') {
         return function() {
-            console.log("r2swida help");
-            console.log("");
-            console.log("\\sw?                                  \tShow this help.");
-            console.log("\\swid <name>...                       \tDemangle one or more Swift names.");
-            console.log("\\swa                                  \tCollect information about Swift types. Needs to be run before most other commands work.");
-            console.log("\\swp <type> <addr>...                 \tDump the Swift variable(s) of type <type> at <addr>.");
-            console.log("\\swdg <generic_type> <type_params>... \tInstantiate the generic type <generic_type> with the type parameters <type_params>.");
-            console.log("\\swt <type>...                        \tShow information about the type(s) <type>.");
-            console.log("\\swtl                                 \tList all types that were found by '\\swa'.");
+            return "r2swida help\n" +
+                "\n" +
+                "\\sw?                                  \tShow this help.\n" +
+                "\\swid <name>...                       \tDemangle one or more Swift names.\n" +
+                "\\swa                                  \tCollect information about Swift types. Needs to be run before most other commands work.\n" +
+                "\\swp <type> <addr>...                 \tDump the Swift variable(s) of type <type> at <addr>.\n" +
+                "\\swdg <generic_type> <type_params>... \tInstantiate the generic type <generic_type> with the type parameters <type_params>.\n" +
+                "\\swt <type>                           \tShow information about the type named <type>.\n" +
+                "\\swtl                                 \tList all types that were found by '\\swa'.\n"
         };
         // TODO: help
     }
