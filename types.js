@@ -397,7 +397,7 @@ function Type(nominalType, canonicalType, name, accessFunction) {
 
     if (canonicalType && (this.kind !== "Class" || canonicalType.isTypeMetadata())) {
         if (!("getSize" in this)) {
-            let size = canonicalType.valueWitnessTable.size;
+            let size = canonicalType.valueWitnessTable.size.toInt32();
             this.getSize = function() { return size };
         }
 
