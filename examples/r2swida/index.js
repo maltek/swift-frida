@@ -3,10 +3,14 @@
 const Swift = require('../../index');
 let types = null;
 
+global.Swift = Swift;
+
+
 r2frida.pluginRegister('swift', function(name) {
     if (name === 'swa') {
         return function(args) {
             types = Swift.enumerateTypesSync();
+            global.swiftTypes = types;
             console.log(`found ${types.size} types`);
         };
     }

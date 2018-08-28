@@ -15,3 +15,6 @@ Swift plugin for [r2frida](https://github.com/nowsecure/r2frida). Compile with
     \swdg <generic_type> <type_params>...   Instantiate the generic type <generic_type> with the type parameters <type_params>.
     \swt <type>...                          Show information about the type(s) <type>.
     \swtl                                   List all types that were found by '\swa'.
+
+After executing `\swa`, you can access the result of `Swift.enumerateTypesSync`
+as the `swiftTypes` variable when running JavaScript code with `\eval`.
