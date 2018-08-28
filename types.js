@@ -448,6 +448,7 @@ function Type(nominalType, canonicalType, name, accessFunction) {
                     runtime.api.swift_stringFromUTF8InRawMemory(address, cStr, value.length);
                     return true;
                 };
+                break;
             case "Swift.Bool":
                 this.toJS = function (address) { return Memory.readU8(address) !== 0; };
                 this.fromJS = function (address, value) { Memory.writeU8(address, value ? 1 : 0); return true; };
