@@ -137,7 +137,7 @@ r2frida.pluginRegister('swift', function(name) {
             return addrs.map(ptr).map(addr => new type(addr).toString()).join("\n");
         };
     }
-    if (name === 'swid') { // demangle symbol name
+    if (name === 'swiD') { // demangle symbol name
         return function(args) {
             return args.map(Swift.demangle).join("\n");
         };
@@ -149,11 +149,11 @@ r2frida.pluginRegister('swift', function(name) {
             return "r2swida help\n" +
                 "\n" +
                 "\\sw?                                  \tShow this help.\n" +
-                "\\swid <name>...                       \tDemangle one or more Swift names.\n" +
+                "\\swiD <name>...                       \tDemangle one or more Swift names.\n" +
                 "\\swa [<lib>...]                       \tCollect information about Swift types (from <lib>, or everywhere). Needs to be run before most other commands work.\n" +
                 "\\swp <type> <addr>...                 \tDump the Swift variable(s) of type <type> at <addr>.\n" +
                 "\\swdg <generic_type> <type_params>... \tInstantiate the generic type <generic_type> with the type parameters <type_params>.\n" +
-                "\\swt <type>                           \tShow information about the type named <type>.\n" +
+                "\\swt <type>                           \tShow information about the type named <type>. Note: quote the whole command with \" to avoid problems with special characters in the type name.\n" +
                 "\\swtl                                 \tList all types that were found by '\\swa'.\n"
         };
         // TODO: help
