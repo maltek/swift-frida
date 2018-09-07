@@ -104,6 +104,9 @@ def print_header(message):
         else:
             name = human
 
+        if name.startswith('?Unknown type of'):
+            name = name.replace('?Unknown type of ', 'XXX_unknown_type_of_')
+
         if name.startswith("Static #"):
             spl = name.split(' ', 4)
             return "_static_no" + spl[1][1:] + "_in_" + spl[3] + "__func" + str(hash(spl[4]))[1:]
