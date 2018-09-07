@@ -10,7 +10,7 @@ Swift plugin for [r2frida](https://github.com/nowsecure/r2frida). Compile with
 
     \sw?                                    Show this help.
     \swid <name>...                         Demangle one or more Swift names.
-    \swa                                    Collect information about Swift types. Needs to be run before most other commands work.
+    \swa [<lib>...]                            Collect information about Swift types (from <lib>, or everywhere). Needs to be run before most other commands work.
     \swp <type> <addr>...                   Dump the Swift variable(s) of type <type> at <addr>.
     \swdg <generic_type> <type_params>...   Instantiate the generic type <generic_type> with the type parameters <type_params>.
     \swt <type>...                          Show information about the type(s) <type>.

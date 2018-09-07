@@ -42,8 +42,8 @@ function makeJsonCompat(obj) {
 }
 
 rpc.exports = {
-    run() {
-        const types = Swift.enumerateTypesSync();
+    run(...args) {
+        const types = Swift.enumerateTypesSync(...args);
         let out = {};
         types.forEach(t => {
             if (t.isGeneric())

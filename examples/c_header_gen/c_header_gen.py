@@ -256,6 +256,6 @@ def print_header(message):
 script.on('message', recv)
 script.load()
 pointer_size = script.exports.pointerSize()
-print_header(script.exports.run())
+print_header(script.exports.run(*sys.argv[2:]))
 session.detach()
 sys.exit(0)

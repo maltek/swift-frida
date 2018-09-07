@@ -1,7 +1,7 @@
 'use strict';
 
 const Swift = require('../../index');
-let types = null;
+let types = new Map();
 
 global.Swift = Swift;
 
@@ -9,7 +9,9 @@ global.Swift = Swift;
 r2frida.pluginRegister('swift', function(name) {
     if (name === 'swa') {
         return function(args) {
-            types = Swift.enumerateTypesSync();
+            for (let [key, val] of Swift.enumerateTypesSync(...args)) {
+                types.set(key, val);
+            }
             global.swiftTypes = types;
             return `found ${types.size} types`;
         };
@@ -148,7 +150,7 @@ r2frida.pluginRegister('swift', function(name) {
                 "\n" +
                 "\\sw?                                  \tShow this help.\n" +
                 "\\swid <name>...                       \tDemangle one or more Swift names.\n" +
-                "\\swa                                  \tCollect information about Swift types. Needs to be run before most other commands work.\n" +
+                "\\swa [<lib>...]                       \tCollect information about Swift types (from <lib>, or everywhere). Needs to be run before most other commands work.\n" +
                 "\\swp <type> <addr>...                 \tDump the Swift variable(s) of type <type> at <addr>.\n" +
                 "\\swdg <generic_type> <type_params>... \tInstantiate the generic type <generic_type> with the type parameters <type_params>.\n" +
                 "\\swt <type>                           \tShow information about the type named <type>.\n" +
