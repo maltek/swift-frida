@@ -204,8 +204,9 @@ def print_header(message):
             if info['isClassBounded'] or info.get('getSuperclassConstraint'):  # class existential container
                 make_decl(f'heap_object', -1, 'void*')
             else:  # opaque existential container
-                union = "union { void *heapObject; void *fixedSizeBuffer[3]; };"
-                decls.append(parser.parse(union).ext[0])
+                decls.append(parser.parse("void *heapObjectOrInlineData0;").ext[0])
+                for i in range(1, 3):
+                    decls.append(parser.parse("void *nothingOrInlineData{};".format(i)).ext[0])
                 make_decl("dynamicType", -1, "Metadata*")
             for i in range(info['witnessTableCount']):
                 make_decl(f'_witnessTable{i + 1}', -1, 'void*')
