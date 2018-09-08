@@ -128,7 +128,10 @@ def print_header(message):
                 protos.append(del_spaces(script.exports.demangle(p)).replace(".", "__"))
             if info['isClassBounded']:
                 protos.append("Swift__AnyObject")
-            outp += "conforming_to__" + "__and__".join(protos)
+            if protos:
+                outp += "conforming_to__" + "__and__".join(protos)
+            else:
+                outp += "Any"
             if info.get('getSuperclassConstraint'):
                 outp += "__inheriting_from_" + mangle_name(info['getSuperclassConstraint'])
         elif info['kind'] == 'Function':
