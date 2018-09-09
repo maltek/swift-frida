@@ -54,65 +54,66 @@ function makeCallTrampoline(func, withError, self, indirectResult) {
         return {callAddr: func};
 
     let buf = Memory.alloc(Process.pageSize);
-    let wr, putBlxImm;
-    if (Process.arch === "arm64") {
-        wr = new Arm64Writer(buf);
-        putBlxImm = 'putBlImm';
-    } else {
-        wr = new ThumbWriter(buf);
-        putBlxImm = 'putBlxImm';
-    }
+    Memory.patchCode(buf, Process.pageSize, (wrtBuf) => {
+      let wr, putBlxImm;
+      if (Process.arch === "arm64") {
+          wr = new Arm64Writer(wrtBuf);
+          putBlxImm = 'putBlImm';
+      } else {
+          wr = new ThumbWriter(wrtBuf);
+          putBlxImm = 'putBlxImm';
+      }
 
-    // initialize error register to 0 (no error)
-    if (withError)
-        wr.putLdrRegAddress(convention.errorRegister, ptr(0));
-    // TODO: we should read the value for 'self' from a global/thread-local variable
-    // that way, we don't need to regenerate this function for every call
-    // set self register to self
-    if (self)
-        wr.putLdrRegAddress(convention.selfRegister, self);
-    // set the indirect result register to pre-allocated memory region
-    if (indirectResult) {
-        if (!convention.indirectResultRegister)
-            throw new Error("only provide the indirect result pointer on platforms with a specific register for it!");
-        wr.putLdrRegAddress(convention.indirectResultRegister, indirectResult);
-    }
+      // initialize error register to 0 (no error)
+      if (withError)
+          wr.putLdrRegAddress(convention.errorRegister, ptr(0));
+      // TODO: we should read the value for 'self' from a global/thread-local variable
+      // that way, we don't need to regenerate this function for every call
+      // set self register to self
+      if (self)
+          wr.putLdrRegAddress(convention.selfRegister, self);
+      // set the indirect result register to pre-allocated memory region
+      if (indirectResult) {
+          if (!convention.indirectResultRegister)
+              throw new Error("only provide the indirect result pointer on platforms with a specific register for it!");
+          wr.putLdrRegAddress(convention.indirectResultRegister, indirectResult);
+      }
 
-    if (withError) {
-        // generate call to actual function
-        wr[putBlxImm](func);
+      if (withError) {
+          // generate call to actual function
+          wr[putBlxImm](func);
 
-        // check if function return error
-        if (Process.arch === "arm64")
-            wr.putTstRegImm(convention.errorRegister, ptr(0));
-        else
-            wr.putCmpRegImm(convention.errorRegister, ptr(0));
+          // check if function return error
+          if (Process.arch === "arm64")
+              wr.putTstRegImm(convention.errorRegister, ptr(0));
+          else
+              wr.putCmpRegImm(convention.errorRegister, ptr(0));
 
-        // skip return if error has occurred
-        wr.putBCondLabel('ne', 'err_case')
-        // return if no error
-        wr.putRet();
+          // skip return if error has occurred
+          wr.putBCondLabel('ne', 'err_case')
+          // return if no error
+          wr.putRet();
 
-        // error has occured!
-        wr.putLabel('err_case')
-        // move error value to first argument
-        wr.putMovRegReg(convention.firstArgRegister, convention.errorRegister);
-        // tail call to JS function that stores the error value
-        wr.putBImm(storeError);
-    } else {
-        // tail call to actual function
-        if ('putBranchAddress' in wr) {
-            wr.putBranchAddress(func);
-        } else {
-            wr.putLdrRegAddress(convention.intraProcedureScratch, func)
-            wr.putBxReg(convention.intraProcedureScratch);
-        }
-    }
+          // error has occured!
+          wr.putLabel('err_case')
+          // move error value to first argument
+          wr.putMovRegReg(convention.firstArgRegister, convention.errorRegister);
+          // tail call to JS function that stores the error value
+          wr.putBImm(storeError);
+      } else {
+          // tail call to actual function
+          if ('putBranchAddress' in wr) {
+              wr.putBranchAddress(func);
+          } else {
+              wr.putLdrRegAddress(convention.intraProcedureScratch, func)
+              wr.putBxReg(convention.intraProcedureScratch);
+          }
+      }
 
-    wr.flush();
-    wr.dispose();
+      wr.flush();
+      wr.dispose();
+    });
 
-    Memory.protect(buf, Process.pageSize, 'r-x');
     let callAddr;
     if (Process.arch === "arm64")
         callAddr = buf;
