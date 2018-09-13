@@ -97,7 +97,11 @@ function Type(nominalType, canonicalType, name, accessFunction) {
                 name += "<" + names.join(", ") + ">";
             let accessFunc = new NativeFunction(accessFunction, 'pointer', args);
             let canonical = accessFunc.apply(null, params.map(t => t.canonicalType._ptr));
-            return new Type(this.nominalType, new metadata.TargetMetadata(canonical), name);
+            let res = new Type(this.nominalType, new metadata.TargetMetadata(canonical), name);
+            if (!typesByName.has(res.toString())) {
+              typesByName.set(res.toString(), res);
+            }
+            return res;
         };
     }
     if (this.nominalType && canonicalType && (this.kind === "Enum" || this.kind === "Optional")) {
@@ -611,6 +615,7 @@ Type.prototype = {
 };
 
 const typesByName = new Map();
+const enumeratedLibs = new Set();
 function findAllTypes(library) {
     let sizeAlloc = Memory.alloc(8);
     const __TEXT = Memory.allocUtf8String("__TEXT");
@@ -645,10 +650,13 @@ function findAllTypes(library) {
         Module.ensureInitialized(library);
         mods = [{name: library, base: Module.findBaseAddress(library)}];
     } else {
-        typesByName.clear();
         mods = Process.enumerateModulesSync();
     }
     for (let mod of mods) {
+        if (enumeratedLibs.has(mod.name))
+            continue;
+        enumeratedLibs.add(mod.name);
+
         for (let section = 0; section < sectionNames.length; section++) {
             // we don't have to use the name _mh_execute_header to refer to the mach-o header -- it's the module header
             let pointer = runtime.api.getsectiondata(mod.base, __TEXT, sectionNames[section], sizeAlloc);
