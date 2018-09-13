@@ -18,6 +18,13 @@ with NamedTemporaryFile() as tmp:
     run(['frida-compile', '-o', tmp.name, os.path.join(os.path.dirname(__file__), './c_header_gen.js')], check=True)
     with open(tmp.name) as script_file:
         script_source = script_file.read()
+
+if len(sys.argv) >= 3 and sys.argv[2] == "--init-script":
+    dump_types = sys.argv[4:]
+    script_source = script_source + "\n;\n" + sys.argv[3]
+else:
+    dump_types = sys.argv[2:]
+
 script = session.create_script(script_source)
 
 
@@ -263,6 +270,7 @@ def print_header(message):
 script.on('message', recv)
 script.load()
 pointer_size = script.exports.pointerSize()
-print_header(script.exports.run(*sys.argv[2:]))
+
+print_header(script.exports.run(*dump_types))
 session.detach()
 sys.exit(0)
