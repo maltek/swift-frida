@@ -10,8 +10,21 @@ The functionality described below is mostly stable and working, but probably
 still has some bugs that need to be fixed (please report them!).
 
 I'm mainly testing things on iOS 11.1.2 (64bit), and on iOS 9.3.5 (32bit). Other
-operating systems are not supported. Only apps using Swift 4.0.* are supported
-at the moment.
+operating systems are not supported for now. Only apps using **Swift 4.0.\***
+are supported at the moment.
+
+## Usage
+
+If you don't have it already, use `npm install frida-compile` to install
+`frida-compile`.
+
+In your script, add this line:
+
+    const Swift = require('/path/to/swift-frida/index.js');
+
+Afterwards, compile your script with `frida-compile` like this:
+
+    frida-compile -w -o /tmp/compiled.js your-script.js
 
 
 ## Available APIs
