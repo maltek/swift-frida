@@ -15,8 +15,15 @@ are supported at the moment.
 
 ## Usage
 
-If you don't have it already, use `npm install frida-compile` to install
-`frida-compile`.
+Clone the project, and install its dependencies:
+
+    git clone https://github.com/maltek/swift-frida.git
+    cd swift-frida
+    npm install
+
+If you don't have it already, install `frida-compile`:
+
+    npm install frida-compile
 
 In your script, add this line:
 
@@ -25,6 +32,24 @@ In your script, add this line:
 Afterwards, compile your script with `frida-compile` like this:
 
     frida-compile -w -o /tmp/compiled.js your-script.js
+
+To play around with the API interactively, you can load the compiled
+`loader.js` into the REPL:
+
+    $ frida-compile -w -o /tmp/swift.js loader.js
+    $ frida -U -n Foo -l /tmp/swift.js
+         ____
+        / _  |   Frida 12.2.14 - A world-class dynamic instrumentation toolkit
+       | (_| |
+        > _  |   Commands:
+       /_/ |_|       help      -> Displays the help system
+       . . . .       object?   -> Display information about 'object'
+       . . . .       exit/quit -> Exit
+       . . . .
+       . . . .   More info at http://www.frida.re/docs/home/
+
+    [iOS Device::Foo]-> Swift.available
+    true
 
 
 ## Available APIs
