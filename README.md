@@ -20,7 +20,7 @@ If you don't have it already, use `npm install frida-compile` to install
 
 In your script, add this line:
 
-    const Swift = require('/path/to/swift-frida/index.js');
+    const Swift = require('/path/to/swift-frida/');
 
 Afterwards, compile your script with `frida-compile` like this:
 
