@@ -106,22 +106,6 @@ Right now, the following functions are available in the `Swift` namespace, when 
 
 But, again, this is completely unstable and might change at any time.
 
-## Test Setup
-
-For testing, you want to run a command like this, to recompile whenever you
-change the scripts:
-
-    frida-compile -w -o /tmp/swift.js loader
-
-Then, you can just run Frida interactively, with the Swift module loaded:
-
-    frida -U -n Foo -l /tmp/swift.js
-
-You can now play with the functions of the `Swift` object.  (After making a
-change to a file in this repo, use `%reload` to reload the Swift script after
-recompiling.)
-
-
 ## License
 
 Code in `metadata.js` is based on Apache-2.0 licensed Swift compiler source
