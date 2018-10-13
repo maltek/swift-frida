@@ -2,7 +2,8 @@
 
 Swift runtime interop from Frida -- interact with iOS apps written in Swift,
 using Frida. (See [frida-swift](https://github.com/frida/frida-swift) instead,
-if you're looking to talk to Frida from Swift code you write.)
+if you're looking to script the Frida debugging session using Swift code you
+write.)
 
 ## Status
 
@@ -50,6 +51,12 @@ To play around with the API interactively, you can load the compiled
 
     [iOS Device::Foo]-> Swift.available
     true
+
+
+## More Information
+You can have a look at a [video recording](https://www.youtube.com/watch?v=yp6E9-h6yYQ) and
+[slides](https://github.com/radareorg/r2con2018/blob/master/talks/swift-frida/r2con2018_swift_frida.pdf)
+of a presentation about this project at *r2con 2018*.
 
 
 ## Available APIs
