@@ -22,10 +22,6 @@ Clone the project, and install its dependencies:
     cd swift-frida
     npm install
 
-If you don't have it already, install `frida-compile`:
-
-    npm install frida-compile
-
 In your script, add this line:
 
     const Swift = require('/path/to/swift-frida/');
