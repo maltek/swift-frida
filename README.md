@@ -2,7 +2,8 @@
 
 Swift runtime interop from Frida -- interact with iOS apps written in Swift,
 using Frida. (See [frida-swift](https://github.com/frida/frida-swift) instead,
-if you're looking to talk to Frida from Swift code you write.)
+if you're looking to script the Frida debugging session using Swift code you
+write.)
 
 ## Status
 
@@ -15,16 +16,47 @@ are supported at the moment.
 
 ## Usage
 
-If you don't have it already, use `npm install frida-compile` to install
-`frida-compile`.
+Clone the project, and install its dependencies:
+
+    git clone https://github.com/maltek/swift-frida.git
+    cd swift-frida
+    npm install
+
+If you don't have it already, install `frida-compile`:
+
+    npm install frida-compile
 
 In your script, add this line:
 
-    const Swift = require('/path/to/swift-frida/index.js');
+    const Swift = require('/path/to/swift-frida/');
 
 Afterwards, compile your script with `frida-compile` like this:
 
     frida-compile -w -o /tmp/compiled.js your-script.js
+
+To play around with the API interactively, you can load the compiled
+`loader.js` into the REPL:
+
+    $ frida-compile -w -o /tmp/swift.js loader.js
+    $ frida -U -n Foo -l /tmp/swift.js
+         ____
+        / _  |   Frida 12.2.14 - A world-class dynamic instrumentation toolkit
+       | (_| |
+        > _  |   Commands:
+       /_/ |_|       help      -> Displays the help system
+       . . . .       object?   -> Display information about 'object'
+       . . . .       exit/quit -> Exit
+       . . . .
+       . . . .   More info at http://www.frida.re/docs/home/
+
+    [iOS Device::Foo]-> Swift.available
+    true
+
+
+## More Information
+You can have a look at a [video recording](https://www.youtube.com/watch?v=yp6E9-h6yYQ) and
+[slides](https://github.com/radareorg/r2con2018/blob/master/talks/swift-frida/r2con2018_swift_frida.pdf)
+of a presentation about this project at *r2con 2018*.
 
 
 ## Available APIs
@@ -80,22 +112,6 @@ Right now, the following functions are available in the `Swift` namespace, when 
 
 
 But, again, this is completely unstable and might change at any time.
-
-## Test Setup
-
-For testing, you want to run a command like this, to recompile whenever you
-change the scripts:
-
-    frida-compile -w -o /tmp/swift.js loader
-
-Then, you can just run Frida interactively, with the Swift module loaded:
-
-    frida -U -n Foo -l /tmp/swift.js
-
-You can now play with the functions of the `Swift` object.  (After making a
-change to a file in this repo, use `%reload` to reload the Swift script after
-recompiling.)
-
 
 ## License
 
